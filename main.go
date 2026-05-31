@@ -33,14 +33,22 @@ func main() {
 		loggerOptions.Level = slog.LevelInfo
 	}
 
-	// Initialize logging.
-	handler := slog.NewTextHandler(os.Stdout, loggerOptions) // Log to stdout in text format.
+	// Initialize logging. Logs go to stderr so they stay separate from program output (the URL map,
+	// which PrintURLMap writes to stdout). To send logs to a JSON file instead, swap this handler for
+	// slog.NewJSONHandler(file, loggerOptions) — the result output on stdout is unaffected.
+	handler := slog.NewTextHandler(os.Stderr, loggerOptions) // Log to stderr in text format.
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
 	// Build the URL map for the given URL.
 	urlMap := internal.BuildUrlMap(cfg.Url, nil)
 
-	// Print the URL map in a readable format.
-	internal.PrintURLMap(urlMap, 0)
+	switch cfg.Output {
+	case 0: // Print to stdout (default)
+		internal.PrintURLMap(urlMap, 0)
+	case 1: // Write to SQLite database
+		slog.Error("Not implemented yet")
+	default: // If nothing is provided, default to stdout
+		slog.Error("Invalid output option, defaulting to stdout")
+	}
 }

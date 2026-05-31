@@ -154,15 +154,3 @@ func ValidateServerReachable(url string) error {
 }
 
 // This is temp for tesing, I dont think it's worth keeping.
-func PrintURLMap(urlMap URLMap, indentLevel int) {
-	indent := strings.Repeat("  ", indentLevel)
-	fmt.Printf("%s- %s\n", indent, urlMap.URL)
-
-	for _, resource := range urlMap.resources {
-		fmt.Printf("%s  * Resource: %s\n", indent, resource)
-	}
-
-	for _, link := range urlMap.links {
-		PrintURLMap(link, indentLevel+1)
-	}
-}

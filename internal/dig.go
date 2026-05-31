@@ -5,6 +5,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/publicsuffix"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -26,6 +27,8 @@ type URLMap struct {
 // Non-HTTP(S) schemes like mailto:, tel:, and javascript: are rejected with
 // an error so gopher doesn't try to fetch them.
 func ResolveHref(pageURL string, hrefValue string) (string, error) {
+	slog.Debug("Resolving hrefValue on page", "hrefValue", hrefValue, "pageURL", pageURL)
+
 	// First we need to check if the hrefValue is empty.
 	if hrefValue == "" {
 		return "", fmt.Errorf("empty hrefValue for pageUrl %q", pageURL)
@@ -49,6 +52,7 @@ func ResolveHref(pageURL string, hrefValue string) (string, error) {
 	// protocol-relative URL so it inherits the page's scheme. If the label is a file extension
 	// (.html, .png, .txt) it's not a public suffix, so we leave it as a relative path.
 	if ref.Scheme == "" && ref.Host == "" && refLooksLikeExternalHost(ref.Path) {
+		slog.Debug("Schemless, authority-less href looks like an external host; treating as protocol-relative URL", "hrefValue", hrefValue)
 		ref, err = url.Parse("//" + hrefValue)
 		if err != nil {
 			return "", fmt.Errorf("invalid hrefValue %q for pageUrl %q: %w", hrefValue, pageURL, err)
@@ -62,22 +66,14 @@ func ResolveHref(pageURL string, hrefValue string) (string, error) {
 	// scheme/host for relative and protocol-relative refs and returning absolute refs unchanged.
 	resolved := base.ResolveReference(ref)
 
+	slog.Debug("Resolved hrefValue to URL", "hrefValue", hrefValue, "resolvedURL", resolved.String(), "scheme", resolved.Scheme, "host", resolved.Host)
+
 	// Reject anything that isn't http(s) (e.g. mailto:, tel:, javascript:) so gopher doesn't fetch it.
 	if resolved.Scheme != "http" && resolved.Scheme != "https" {
 		return "", fmt.Errorf("unsupported scheme %q in hrefValue %q for pageUrl %q", resolved.Scheme, hrefValue, pageURL)
 	}
 
 	return resolved.String(), nil
-}
-
-// fileExtensionTLDs are labels that are technically ICANN-registered TLDs but, in an href, are far
-// more likely to be a file extension. We keep refs ending in these as relative paths to the current
-// page rather than promoting them to external hosts.
-var fileExtensionTLDs = map[string]bool{
-	"md":  true, // Markdown vs. Moldova ccTLD
-	"sh":  true, // shell script vs. Saint Helena ccTLD
-	"zip": true, // archive vs. gTLD
-	"mov": true, // QuickTime video vs. gTLD
 }
 
 // refLooksLikeExternalHost reports whether a schemeless, authority-less ref path looks like it was
@@ -90,41 +86,60 @@ func refLooksLikeExternalHost(path string) bool {
 		return false
 	}
 
+	slog.Debug("Checking if ref path looks like external host", "path", path)
+
 	// Only the first segment can be the host; everything after the first "/" is a path on it.
 	segment := path
 	if i := strings.IndexByte(segment, '/'); i >= 0 {
+		slog.Debug("Ref path contains slash; treating everything after first slash as path", "segment", segment, "path", path)
 		segment = segment[:i]
 	}
 
 	// Guard against relative markers like "." / ".." that contain dots but aren't hosts.
 	if segment == "" || strings.HasPrefix(segment, ".") || strings.Contains(segment, "..") {
+		slog.Debug("Ref path segment is empty or starts with dot or contains dots, treating as relative path", "segment", segment)
 		return false
 	}
 	if !strings.Contains(segment, ".") {
+		slog.Debug("Ref path segment contains no dots, treating as relative path", "segment", segment)
 		return false
 	}
 
 	// icann==true means the suffix is a real registered TLD (not a file extension); suffix != segment
 	// ensures there's an actual host label in front of the TLD (rules out a bare "com").
 	suffix, icann := publicsuffix.PublicSuffix(segment)
+	slog.Debug("Extracted public suffix from ref path segment", "segment", segment, "suffix", suffix, "icann", icann)
 	if !icann || suffix == segment {
+		slog.Debug("Ref path segment does not have an ICANN-registered public suffix or is just a suffix with no host label, treating as relative path", "segment", segment, "suffix", suffix, "icann", icann)
 		return false
 	}
 
-	// Suffix is a real TLD, but if it's a common file extension we treat the ref as a relative file.
-	return !fileExtensionTLDs[suffix]
+	// This part is tricky, our fileExtensionTLDs contains both common file extensions that can also be TLDs
+	// In that case, we just treat them as file extensions.
+	isSuffixTld := fileExtensionTLDs[suffix]
+	if isSuffixTld {
+		slog.Debug("Ref path segment has a public suffix that is likely a file extension, treating as relative path", "segment", segment, "suffix", suffix)
+		return false
+	} else {
+		slog.Debug("Ref path segment has a public suffix that is a real TLD, treating as external host", "segment", segment, "suffix", suffix)
+		return true
+	}
 }
 
 // GetPageContent makes an HTTP request to the given URL and returns the HTML content as a string.
 // Note that GetPageContent expects the url to be a valid URL that is reachable.
 // It also handles any errors that may occur during the request, which ultimately is returned.
 func GetPageContent(url string) (string, error) {
+	slog.Debug("Fetching page content for URL", "url", url)
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}
 
 	defer resp.Body.Close()
+
+	slog.Debug("Received HTTP response for URL", "url", url, "statusCode", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to fetch page content: %s", resp.Status)
@@ -146,6 +161,8 @@ func GetPageContent(url string) (string, error) {
 // unsupported scheme like mailto:) are collected and returned as the second slice.
 // The two slices are NOT parallel-indexed — they're independent collections.
 func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error) {
+	slog.Debug("Extracting links from HTML content", "pageURL", pageURL)
+
 	// Map of resolved URLs we've seen, used to dedupe within a single page.
 	linksMap := make(map[string]struct{})
 
@@ -163,6 +180,7 @@ func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error
 		// If we encounter any other error, we return an empty list of links plus the error.
 		if tokenType == html.ErrorToken {
 			if tokenizer.Err() == io.EOF {
+				slog.Debug("Finished tokenizing HTML content for page", "pageURL", pageURL)
 				break
 			}
 
@@ -178,6 +196,7 @@ func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error
 					continue
 				}
 
+				slog.Debug("Found href attribute in HTML token", "hrefValue", attr.Val, "token", token.Data, "pageURL", pageURL)
 				resolved, err := ResolveHref(pageURL, attr.Val)
 				if err != nil {
 					parseErrors = append(parseErrors, err)
@@ -188,6 +207,8 @@ func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error
 			}
 		}
 	}
+
+	slog.Debug("Extracted links from HTML content", "pageURL", pageURL, "linksFound", len(linksMap), "parseErrors", len(parseErrors))
 
 	// Transform the map of links into a list of links to return.
 	links := make([]string, 0, len(linksMap))
@@ -203,6 +224,8 @@ func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error
 // It returns a URLMap struct containing the URL, its links, and resources.
 // We keep track of visited URLs to avoid infinite loops and redundant processing.
 func BuildUrlMap(url string, visited map[string]struct{}) URLMap {
+	slog.Debug("Building URL map for URL", "url", url, "visitedCount", len(visited))
+
 	// When the buildUrlMap is first invoked, visited will be nil, so we need to initialize it as an empty map
 	// for the first invocation. Subsequent calls will recieve a populated visited map, so we won't reinitialize it.
 	if visited == nil {
@@ -211,6 +234,7 @@ func BuildUrlMap(url string, visited map[string]struct{}) URLMap {
 
 	// First, let's avoid infinite loops by checking if we've already visited this URL. If we have, we return an empty URLMap.
 	if _, ok := visited[url]; ok {
+		slog.Debug("Already visited URL, skipping to avoid cycle", "url", url)
 		return URLMap{}
 	}
 
@@ -220,7 +244,7 @@ func BuildUrlMap(url string, visited map[string]struct{}) URLMap {
 	// Fetch the page content for the given URL.
 	pageContent, err := GetPageContent(url)
 	if err != nil {
-		fmt.Printf("Error fetching page content for %s: %v\n", url, err)
+		slog.Error("Error fetching page content", "url", url, "error", err)
 		return URLMap{URL: url}
 	}
 
@@ -242,6 +266,8 @@ func BuildUrlMap(url string, visited map[string]struct{}) URLMap {
 			urlMap.links = append(urlMap.links, childUrlMap)
 		}
 	}
+
+	slog.Debug("Built URL map for URL", "url", url, "linksFound", len(links), "errors", len(errors))
 
 	return urlMap
 }
