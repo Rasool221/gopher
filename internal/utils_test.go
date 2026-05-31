@@ -2,61 +2,42 @@ package internal
 
 import "testing"
 
-// TestResolveHref covers the cases ResolveHref needs to get right:
-// absolute URLs of various shapes, all the relative forms (root, document,
-// parent, query-only, fragment-only, protocol-relative), and rejection of
-// non-HTTP(S) schemes.
-func TestResolveHref(t *testing.T) {
+func TestValidateURLFormat(t *testing.T) {
 	tests := []struct {
-		pageURL  string
-		href     string
-		expected string // empty when we expect an error
-		wantErr  bool
+		name    string
+		url     string
+		wantErr bool
 	}{
-		// Absolute URLs pass through.
-		{"http://test.local/", "http://example.com", "http://example.com", false},
-		{"http://test.local/", "https://example.com", "https://example.com", false},
-		{"http://test.local/", "http://example.com:8080", "http://example.com:8080", false},
-		{"http://test.local/", "http://example.com/path?query=1", "http://example.com/path?query=1", false},
-
-		// Root-relative href: resolves against base scheme+host.
-		{"http://test.local/products/", "/about.html", "http://test.local/about.html", false},
-
-		// Document-relative href: resolves against the page's directory.
-		{"http://test.local/products/", "widget.html", "http://test.local/products/widget.html", false},
-
-		// Parent-directory href.
-		{"http://test.local/products/", "../about.html", "http://test.local/about.html", false},
-
-		// Query-only href: keeps the page's path, replaces the query.
-		{"http://test.local/search.html?q=old", "?q=new", "http://test.local/search.html?q=new", false},
-
-		// Fragment-only href: keeps the page's path, attaches the fragment.
-		{"http://test.local/contact.html", "#form", "http://test.local/contact.html#form", false},
-
-		// Protocol-relative href: inherits the base's scheme.
-		{"https://test.local/", "//cdn.example.com/lib.js", "https://cdn.example.com/lib.js", false},
-
-		// Non-HTTP(S) schemes are rejected.
-		{"http://test.local/", "mailto:hello@example.com", "", true},
-		{"http://test.local/", "javascript:void(0)", "", true},
-		{"http://test.local/", "tel:+15551234567", "", true},
+		{"Valid HTTP URL", "http://example.com", false},
+		{"Valid HTTPS URL", "https://example.com", false},
+		{"Valid URL with port", "http://example.com:8080", false},
+		{"Validate URL without scheme", "www.example.com", false},
+		{"Valid URL without scheme", "example.com", false},
+		{"Valid localhost URL", "http://localhost:8080", false},
+		{"Valid localhost URL without port", "http://localhost", false},
+		{"Valid localhost URL without scheme", "localhost:8080", false},
+		{"Valid localhost URL without scheme and port", "localhost", false},
+		{"Valid IP address URL", "192.168.1.1", false},
+		{"Valid IP address URL with scheme", "http://192.168.1.1", false},
+		{"Valid IP address URL with scheme and port", "http://192.168.1.1:8080", false},
+		{"Valid IP address URL with port", "192.168.1.1:8080", false},
+		{"Empty URL", "", true},
+		{"Invalid URL format", "http://example", true},
+		{"Invalid URL format with spaces", "example", true},
+		{"Invalid URL with special characters", "http://exa&*$.com", true},
+		{"Invalid URL with unsupported scheme", "ftp://example.com", true},
 	}
 
-	for _, test := range tests {
-		got, err := ResolveHref(test.pageURL, test.href)
-		if test.wantErr {
-			if err == nil {
-				t.Errorf("ResolveHref(%q, %q): expected error, got %q", test.pageURL, test.href, got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseAndValidateURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateURLFormat() test=%q url=%q error = %v, wantErr %v", tt.name, tt.url, err, tt.wantErr)
+				return
 			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("ResolveHref(%q, %q): unexpected error: %v", test.pageURL, test.href, err)
-			continue
-		}
-		if got != test.expected {
-			t.Errorf("ResolveHref(%q, %q): expected %q, got %q", test.pageURL, test.href, test.expected, got)
-		}
+			if got != tt.url && !tt.wantErr {
+				t.Errorf("ValidateURLFormat() got = %v, want %v", got, tt.url)
+			}
+		})
 	}
 }

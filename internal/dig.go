@@ -2,12 +2,12 @@ package internal
 
 import (
 	"fmt"
+	"golang.org/x/net/html"
+	"golang.org/x/net/publicsuffix"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"golang.org/x/net/html"
 )
 
 type URLMap struct {
@@ -24,32 +24,95 @@ type URLMap struct {
 // ("widget.html"), parent ("../up.html"), protocol-relative ("//host/x"),
 // and query/fragment-only ("?q=1", "#anchor").
 // Non-HTTP(S) schemes like mailto:, tel:, and javascript: are rejected with
-// an error so the crawler doesn't try to fetch them.
+// an error so gopher doesn't try to fetch them.
 func ResolveHref(pageURL string, hrefValue string) (string, error) {
-	// Parse the page URL first; if it isn't a valid URL we can't resolve anything against it.
+	// First we need to check if the hrefValue is empty.
+	if hrefValue == "" {
+		return "", fmt.Errorf("empty hrefValue for pageUrl %q", pageURL)
+	}
+
+	// Parse the page URL; this is the base every relative href resolves against.
 	base, err := url.Parse(pageURL)
 	if err != nil {
-		return "", fmt.Errorf("invalid page URL %q: %w", pageURL, err)
+		return "", fmt.Errorf("invalid pageUrl %q: %w", pageURL, err)
 	}
 
-	// Parse the href. url.Parse is permissive — it treats arbitrary strings
-	// as path-only references — so the real validation happens via the scheme
-	// check on the resolved URL below.
 	ref, err := url.Parse(hrefValue)
 	if err != nil {
-		return "", fmt.Errorf("invalid href %q: %w", hrefValue, err)
+		return "", fmt.Errorf("invalid hrefValue %q for pageUrl %q: %w", hrefValue, pageURL, err)
 	}
 
-	// ResolveReference inherits the base's scheme/host when the href doesn't
-	// supply them, so we check scheme on the result rather than on the raw href.
-	// This way "mailto:..." (scheme = "mailto") gets rejected, but "/about"
-	// (no scheme, inherits "http" from the base) gets through.
+	// A schemeless ref with no authority (e.g. "notes.io/post", "example.com") is, per RFC 3986,
+	// a relative path so it would resolve against the current host. But the author may have meant
+	// an external site. We disambiguate on the first path segment: if its trailing label is a real
+	// ICANN-registered TLD (.com, .io, ...) we treat it as an external host by re-parsing it as a
+	// protocol-relative URL so it inherits the page's scheme. If the label is a file extension
+	// (.html, .png, .txt) it's not a public suffix, so we leave it as a relative path.
+	if ref.Scheme == "" && ref.Host == "" && refLooksLikeExternalHost(ref.Path) {
+		ref, err = url.Parse("//" + hrefValue)
+		if err != nil {
+			return "", fmt.Errorf("invalid hrefValue %q for pageUrl %q: %w", hrefValue, pageURL, err)
+		}
+	}
+
+	// Now if the hrefValue is a relative URL, we can resolve it against the pageURL.
+	// If it's an absolute URL to the same host we can just return it.
+	// Otherwise if it's an absolute URL to a different host, we should validate it and return it if it's valid.
+	// ResolveReference handles all of these shapes per RFC 3986, inheriting the base's
+	// scheme/host for relative and protocol-relative refs and returning absolute refs unchanged.
 	resolved := base.ResolveReference(ref)
+
+	// Reject anything that isn't http(s) (e.g. mailto:, tel:, javascript:) so gopher doesn't fetch it.
 	if resolved.Scheme != "http" && resolved.Scheme != "https" {
-		return "", fmt.Errorf("unsupported scheme %q in href %q", resolved.Scheme, hrefValue)
+		return "", fmt.Errorf("unsupported scheme %q in hrefValue %q for pageUrl %q", resolved.Scheme, hrefValue, pageURL)
 	}
 
 	return resolved.String(), nil
+}
+
+// fileExtensionTLDs are labels that are technically ICANN-registered TLDs but, in an href, are far
+// more likely to be a file extension. We keep refs ending in these as relative paths to the current
+// page rather than promoting them to external hosts.
+var fileExtensionTLDs = map[string]bool{
+	"md":  true, // Markdown vs. Moldova ccTLD
+	"sh":  true, // shell script vs. Saint Helena ccTLD
+	"zip": true, // archive vs. gTLD
+	"mov": true, // QuickTime video vs. gTLD
+}
+
+// refLooksLikeExternalHost reports whether a schemeless, authority-less ref path looks like it was
+// meant to be an external host rather than a relative path. It inspects only the first path segment
+// (so "notes.io/post" is judged on "notes.io") and treats it as a host when its trailing label is an
+// ICANN-registered public suffix — e.g. "example.com" / "notes.io" yes, "about.html" / "logo.txt" no.
+// Labels in fileExtensionTLDs (e.g. .md, .sh) are kept relative even though they're valid TLDs.
+func refLooksLikeExternalHost(path string) bool {
+	if path == "" || strings.HasPrefix(path, "/") {
+		return false
+	}
+
+	// Only the first segment can be the host; everything after the first "/" is a path on it.
+	segment := path
+	if i := strings.IndexByte(segment, '/'); i >= 0 {
+		segment = segment[:i]
+	}
+
+	// Guard against relative markers like "." / ".." that contain dots but aren't hosts.
+	if segment == "" || strings.HasPrefix(segment, ".") || strings.Contains(segment, "..") {
+		return false
+	}
+	if !strings.Contains(segment, ".") {
+		return false
+	}
+
+	// icann==true means the suffix is a real registered TLD (not a file extension); suffix != segment
+	// ensures there's an actual host label in front of the TLD (rules out a bare "com").
+	suffix, icann := publicsuffix.PublicSuffix(segment)
+	if !icann || suffix == segment {
+		return false
+	}
+
+	// Suffix is a real TLD, but if it's a common file extension we treat the ref as a relative file.
+	return !fileExtensionTLDs[suffix]
 }
 
 // GetPageContent makes an HTTP request to the given URL and returns the HTML content as a string.

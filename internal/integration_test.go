@@ -54,9 +54,9 @@ func TestIntegration_GetPageContent_FollowsRedirect(t *testing.T) {
 }
 
 // TestIntegration_BuildUrlMap_TraversesSite walks the test site from the root
-// and asserts the crawler reached a sampling of pages from each section.
+// and asserts gopher reached a sampling of pages from each section.
 // It also implicitly tests that cycles (e.g. blog post-3 linking to itself)
-// don't hang gopher — if they did, this test would time out instead of
+// don't hang gopher, if they did, this test would time out instead of
 // failing with an assertion.
 func TestIntegration_BuildUrlMap_TraversesSite(t *testing.T) {
 	root := testSiteURL + "/"

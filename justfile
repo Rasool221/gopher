@@ -1,3 +1,7 @@
+# List all available recipes (default when running `just` with no arguments).
+default:
+  @just --list
+
 # Run gopher locally. Pass URL and flags after `run`, e.g.:
 #   just run http://localhost:8080 -w 4 -v
 run *ARGS:

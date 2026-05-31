@@ -1,52 +1,48 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Gopher Test Site · Home</title>
-</head>
-<body>
-  <header>
-    <h1>Gopher Test Site</h1>
-    <nav>
-      <a href="/">Home</a> ·
-      <a href="/about.html">About</a> ·
-      <a href="/products/">Products</a> ·
-      <a href="/blog/">Blog</a> ·
-      <a href="/contact.html">Contact</a>
-    </nav>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <title>Gopher Test Site · Home</title>
+  </head>
+  <body>
+    <header>
+      <h1>Gopher Test Site</h1>
+      <nav>
+        <a href="/">Home</a> · <a href="/about.html">About</a> ·
+        <a href="/products/">Products</a> · <a href="/blog/">Blog</a> ·
+        <a href="/contact.html">Contact</a>
+      </nav>
+    </header>
 
-  <main>
-    <p>A small multi-page site for testing the URL crawler.</p>
+    <main>
+      <p>A small multi-page site for testing the gopher.</p>
 
-    <h2>Internal links</h2>
-    <ul>
-      <li><a href="/about.html">About (absolute path)</a></li>
-      <li><a href="about.html">About (relative path)</a></li>
-      <li><a href="/products/">Products index</a></li>
-      <li><a href="/products/widget.html">Widget product page</a></li>
-      <li><a href="/blog/post-1.html">Blog post 1</a></li>
-      <li><a href="/deep/level-1.html">Start of nested path</a></li>
-      <li><a href="/contact.html#form">Contact (with anchor)</a></li>
-      <li><a href="/search.html?q=gopher&amp;page=2">Search (with query string)</a></li>
-    </ul>
+      <h2>Internal links</h2>
+      <ul>
+        <li><a href="/about.html">About (absolute path)</a></li>
+        <li><a href="about.html">About (relative path)</a></li>
+        <li><a href="/products/">Products index</a></li>
+        <li><a href="/products/widget.html">Widget product page</a></li>
+        <li><a href="/blog/post-1.html">Blog post 1</a></li>
+        <li><a href="/deep/level-1.html">Start of nested path</a></li>
+        <li><a href="/contact.html#form">Contact (with anchor)</a></li>
+        <li>
+          <a href="/search.html?q=gopher&amp;page=2"
+            >Search (with query string)</a
+          >
+        </li>
+      </ul>
 
-    <h2>Edge cases</h2>
-    <ul>
-      <li><a href="/redirect-once">302 redirect to /about.html</a></li>
-      <li><a href="/redirect-chain">302 redirect chain</a></li>
-      <li><a href="/missing.html">Broken link (404)</a></li>
-      <li><a href="/gone">Gone (410)</a></li>
-      <li><a href="mailto:hello@example.com">mailto:</a></li>
-      <li><a href="tel:+15551234567">tel:</a></li>
-      <li><a href="javascript:void(0)">javascript:</a></li>
-    </ul>
-
-  <!--   <h2>External links</h2> -->
-  <!--   <ul> -->
-  <!--     <li><a href="https://example.com/">example.com</a></li> -->
-  <!--     <li><a href="https://example.org/path/here">example.org subpath</a></li> -->
-  <!--   </ul> -->
-  </main>
-</body>
+      <h2>Edge cases</h2>
+      <ul>
+        <li><a href="/redirect-once">302 redirect to /about.html</a></li>
+        <li><a href="/redirect-chain">302 redirect chain</a></li>
+        <li><a href="/missing.html">Broken link (404)</a></li>
+        <li><a href="/gone">Gone (410)</a></li>
+        <li><a href="mailto:hello@example.com">mailto:</a></li>
+        <li><a href="tel:+15551234567">tel:</a></li>
+        <li><a href="javascript:void(0)">javascript:</a></li>
+      </ul>
+    </main>
+  </body>
 </html>
