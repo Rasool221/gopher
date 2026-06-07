@@ -1,10 +1,73 @@
+# Two identical nginx sites are served under two
+# different hostnames via Docker network aliases (primary.com / external.com), so
+# gopher parses them as two distinct base domains. Both listen on :80 inside the
+# network, so the base domain — not the port — is what differs (gopher treats
+# localhost:8080 and localhost:9090 as the same domain, which is why a second port
+# alone can't exercise the External flag).
+#
+# The `tests` service runs `go test` on the same network, so it resolves those
+# aliases without any host /etc/hosts edits or public DNS. Run it with:
+#   just integration-tests
 services:
-  web:
+  # The primary test site, reachable at http://primary.com:8080/ (from Docker containers) and http://localhost:8080/ (from host machine)
+  primary:
     image: nginx:alpine
-    container_name: gopher-test-site
+    container_name: gopher-test-primary
     ports:
-      - "8080:80"
+      - "8080:80" 
     volumes:
       - ./site:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      default:
+        aliases:
+          - primary.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     restart: unless-stopped
+
+  # Identical to `primary`, just reachable under a different base domain so links
+  # to it count as external. Shares the same site content and nginx config.
+  # Reachable at http://external.com:8081/ (from Docker containers) and http://localhost:8081/ (from host machine)
+  external:
+    image: nginx:alpine
+    container_name: gopher-test-external
+    ports:
+      - "8081:80" 
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      default:
+        aliases:
+          - external.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  tests:
+    image: golang:1.26.1-alpine
+    profiles: ["test"]
+    working_dir: /app
+    environment:
+      - GOTOOLCHAIN=local
+    volumes:
+      - ..:/app
+      # Reuse the host module cache so deps don't re-download inside the container.
+      - ${HOME}/go/pkg/mod:/go/pkg/mod
+      - gocache:/root/.cache/go-build
+    depends_on:
+      primary:
+        condition: service_healthy
+      external:
+        condition: service_healthy
+    command: ["go", "test", "-tags=integration", "-count=1", "-v", "./internal/..."]
+
+volumes:
+  gocache:
