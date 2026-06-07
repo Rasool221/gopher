@@ -38,3 +38,8 @@ Gopher can be configured with the following options (you may see `internal/cli.g
 - [ ] Support for using proxies to make requests
 - [ ] Support for delaying requests to avoid rate-limiting
 - [ ] Deeper crawling by detecting resource file servers and crawling them, while subtracting paths (e.g. if we find `example.com/assets/files2024/images/photo.jpg`, we can crawl `assets/files2024/`, then `/assets`, and so on)
+- [ ] Add CONTRIBUTING.md with guidelines for contributing to the project
+- [ ] Add Github Actions for CI/CD (e.g. run tests on push, build binaries on release)
+- [ ] Release on package managers (e.g. Homebrew, APT, etc.) once v1 is ready
+
+
