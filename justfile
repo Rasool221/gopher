@@ -11,13 +11,13 @@ run *ARGS:
 unit-tests:
   go test -v ./...
 
-# Run integration tests against the dockerized test site.
-# Brings the site up if it isn't already, waits for it, then runs the tests.
-# Site is left running afterwards — use `just test-site-down` when done.
-integration-tests: test-site-up
-  @echo "Waiting for test site at http://localhost:8080..."
-  @until curl -sf http://localhost:8080/ > /dev/null; do sleep 0.2; done
-  go test -tags=integration -v -count=1 ./internal/...
+# Run integration tests against the dockerized test sites.
+# Runs `go test` inside the compose network (the `tests` service), which is what lets it
+# resolve the primary.com / external.com aliases. depends_on waits for the sites'
+# healthchecks first; sites are left running afterwards — use `just test-site-down`.
+integration-tests:
+  docker compose -f test/docker-compose.yml run --rm tests
+  docker compose -f test/docker-compose.yml down
 
 test-site-up:
   docker compose -f test/docker-compose.yml up -d

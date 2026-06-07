@@ -219,27 +219,37 @@ func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error
 	return links, parseErrors
 }
 
-// buildUrlMap takes a URL as input, fetches page content, and recursively
-// scans other URLs found to build a map of the webserver.
-// It returns a URLMap struct containing the URL, its links, and resources.
-// We keep track of visited URLs to avoid infinite loops and redundant processing.
-func BuildUrlMap(url string, visited map[string]struct{}) URLMap {
-	slog.Debug("Building URL map for URL", "url", url, "visitedCount", len(visited))
+// Gopher crawls a web server starting from a seed URL, building a tree (URLMap) of the pages and
+// links it finds. It carries the run's Config plus the set of already-visited URLs, so the recursive
+// crawl can honor limits and dedupe cycles without threading that state through every call.
+type Gopher struct {
+	cfg     Config
+	visited map[string]struct{}
+}
 
-	// When the buildUrlMap is first invoked, visited will be nil, so we need to initialize it as an empty map
-	// for the first invocation. Subsequent calls will recieve a populated visited map, so we won't reinitialize it.
-	if visited == nil {
-		visited = make(map[string]struct{})
+// NewGopher returns a Gopher ready to crawl with the given config. The visited set is initialized
+// here, so callers never deal with a nil map.
+func NewGopher(cfg Config) *Gopher {
+	return &Gopher{
+		cfg:     cfg,
+		visited: make(map[string]struct{}),
 	}
+}
+
+// BuildURLMap fetches the page at url, then recursively crawls every link it finds, returning a
+// URLMap of the URL, its links, and any errors. Visited URLs are tracked on the receiver to avoid
+// infinite loops and redundant work.
+func (g *Gopher) BuildURLMap(url string) URLMap {
+	slog.Debug("Building URL map for URL", "url", url, "visitedCount", len(g.visited))
 
 	// First, let's avoid infinite loops by checking if we've already visited this URL. If we have, we return an empty URLMap.
-	if _, ok := visited[url]; ok {
+	if _, ok := g.visited[url]; ok {
 		slog.Debug("Already visited URL, skipping to avoid cycle", "url", url)
 		return URLMap{}
 	}
 
 	// Mark the current URL as visited.
-	visited[url] = struct{}{}
+	g.visited[url] = struct{}{}
 
 	// Fetch the page content for the given URL.
 	pageContent, err := GetPageContent(url)
@@ -248,20 +258,47 @@ func BuildUrlMap(url string, visited map[string]struct{}) URLMap {
 		return URLMap{URL: url}
 	}
 
+	urlMap := URLMap{
+		URL:    url,
+		links:  []URLMap{},
+		errors: []error{},
+	}
+
 	// Extract links from the page content. We pass the page URL itself (not just
 	// the scheme+host) so that document-relative hrefs like "widget.html" resolve
 	// against the directory the page lives in.
 	links, errors := ExtractLinksFromHTML(url, pageContent)
 
-	urlMap := URLMap{
-		URL:    url,
-		links:  []URLMap{},
-		errors: errors,
+	currentBaseDomain, err := GetBaseDomain(url)
+	if err != nil {
+		slog.Error("Error extracting base domain from URL", "url", url, "error", err)
+		urlMap.errors = append(urlMap.errors, err)
+		return urlMap
 	}
 
 	// Create a URLMap for the current URL and recursively build URLMaps for each link found.
+	// Here we will also honor the cfg.External setting to decide whether to include external links (links to different domains) in the crawl.
 	for _, link := range links {
-		childUrlMap := BuildUrlMap(link, visited)
+		childBaseDomain, err := GetBaseDomain(link)
+		if err != nil {
+			slog.Error("Error extracting base domain from link URL", "linkURL", link, "error", err)
+			continue
+		}
+
+		// Honoring the cfg.External setting.
+		if !g.cfg.External && childBaseDomain != currentBaseDomain {
+			slog.Debug("Skipping external link due to configuration", "linkURL", link, "childBaseDomain", childBaseDomain, "currentBaseDomain", currentBaseDomain)
+			continue
+		}
+
+		// Checking if the link is valid.
+		err = ValidateURL(link)
+		if err != nil {
+			slog.Error("Error validating link URL", "linkURL", link, "error", err)
+			continue
+		}
+
+		childUrlMap := g.BuildURLMap(link)
 		if childUrlMap.URL != "" {
 			urlMap.links = append(urlMap.links, childUrlMap)
 		}
