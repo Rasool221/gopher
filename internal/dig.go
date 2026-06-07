@@ -237,21 +237,14 @@ func NewGopher(cfg Config) *Gopher {
 }
 
 // BuildURLMap fetches the page at url, then recursively crawls every link it finds, returning a
-// URLMap of the URL, its links, and any errors. currentDepth is the depth of url relative to the
-// seed (the seed is depth 0); it's compared against cfg.MaxDepth to bound the crawl. Visited URLs
-// are tracked on the receiver to avoid infinite loops and redundant work.
-func (g *Gopher) BuildURLMap(url string, currentDepth int) URLMap {
+// URLMap of the URL, its links, and any errors. Visited URLs are tracked on the receiver to avoid
+// infinite loops and redundant work.
+func (g *Gopher) BuildURLMap(url string) URLMap {
 	slog.Debug("Building URL map for URL", "url", url, "visitedCount", len(g.visited))
 
 	// First, let's avoid infinite loops by checking if we've already visited this URL. If we have, we return an empty URLMap.
 	if _, ok := g.visited[url]; ok {
 		slog.Debug("Already visited URL, skipping to avoid cycle", "url", url)
-		return URLMap{}
-	}
-
-	// Now we honor the cfg.MaxUrls limit before we do any work on this URL. If we've already visited MaxUrls URLs, we return an empty URLMap.
-	if g.cfg.MaxUrls != 0 && len(g.visited) >= g.cfg.MaxUrls {
-		slog.Debug("Reached maximum URL limit, stopping crawl", "url", url, "visitedCount", len(g.visited), "maxUrls", g.cfg.MaxUrls)
 		return URLMap{}
 	}
 
@@ -265,19 +258,10 @@ func (g *Gopher) BuildURLMap(url string, currentDepth int) URLMap {
 		return URLMap{URL: url}
 	}
 
-	// Here we will build the URL map so we can short-circuit early if we're about to exceed cfg.Depth
-	// set in configuration.
 	urlMap := URLMap{
 		URL:    url,
 		links:  []URLMap{},
 		errors: []error{},
-	}
-
-	// Honor the configured depth limit (MaxDepth == 0 means unlimited).
-	// Before we crawn to sub-links.
-	if g.cfg.MaxDepth != 0 && currentDepth >= g.cfg.MaxDepth {
-		slog.Debug("Reached maximum depth, stopping recursion", "url", url, "currentDepth", currentDepth, "maxDepth", g.cfg.MaxDepth)
-		return urlMap
 	}
 
 	// Extract links from the page content. We pass the page URL itself (not just
@@ -314,7 +298,7 @@ func (g *Gopher) BuildURLMap(url string, currentDepth int) URLMap {
 			continue
 		}
 
-		childUrlMap := g.BuildURLMap(link, currentDepth+1)
+		childUrlMap := g.BuildURLMap(link)
 		if childUrlMap.URL != "" {
 			urlMap.links = append(urlMap.links, childUrlMap)
 		}

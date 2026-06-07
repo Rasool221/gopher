@@ -32,16 +32,6 @@ func ValidateCLI(cfg CLIConfig) error {
 		return errors.New("Invalid log level: must be 0 (error), 1 (info), or 2 (debug)")
 	}
 
-	// Validate Depth
-	if cfg.Depth < 0 {
-		return errors.New("Invalid depth: must be 0 (unlimited) or a positive integer")
-	}
-
-	// Validate MaxUrls
-	if cfg.MaxUrls < 0 {
-		return errors.New("Invalid max URLs: must be 0 (unlimited) or a positive integer")
-	}
-
 	// Validate Output
 	if cfg.Output < 0 || cfg.Output > 1 {
 		return errors.New("Invalid output option: must be 0 (stdout) or 1 (sqlite)")

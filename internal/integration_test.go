@@ -151,7 +151,7 @@ func TestIntegration_GetPageContent_FollowsRedirect(t *testing.T) {
 // instead of failing an assertion.
 func TestIntegration_BuildUrlMap_TraversesSite(t *testing.T) {
 	root := testSiteURL + "/"
-	got := NewGopher(NewConfig(CLIConfig{})).BuildURLMap(root, 0)
+	got := NewGopher(NewConfig(CLIConfig{})).BuildURLMap(root)
 	printCrawl("BuildUrlMap (primary, External=false)", got)
 
 	if got.URL != root {
@@ -170,54 +170,13 @@ func TestIntegration_External_FlagControlsCrossDomainTraversal(t *testing.T) {
 	root := testSiteURL + "/"
 
 	// External enabled: every primary AND external route should be traversed.
-	withExternal := NewGopher(NewConfig(CLIConfig{External: true})).BuildURLMap(root, 0)
+	withExternal := NewGopher(NewConfig(CLIConfig{External: true})).BuildURLMap(root)
 	printCrawl("External=true (primary + external)", withExternal)
 	allURLs := append(append([]string{}, primaryURLs...), externalURLs...)
 	assertReachedExactly(t, withExternal, allURLs)
 
 	// External disabled: only the primary routes should be traversed.
-	withoutExternal := NewGopher(NewConfig(CLIConfig{External: false})).BuildURLMap(root, 0)
+	withoutExternal := NewGopher(NewConfig(CLIConfig{External: false})).BuildURLMap(root)
 	printCrawl("External=false (primary only)", withoutExternal)
 	assertReachedExactly(t, withoutExternal, primaryURLs)
-}
-
-func TestIntegration_Depth_LimitsTraversal(t *testing.T) {
-	root := testSiteURL + "/"
-
-	// With depth=1, gopher should only reach the home page and its immediate links.
-	depth1 := NewGopher(NewConfig(CLIConfig{Depth: 1})).BuildURLMap(root, 0)
-	printCrawl("Depth=1", depth1)
-	wantDepth1 := []string{
-		testSiteURL + "/",
-		testSiteURL + "/about.html",
-		testSiteURL + "/blog/",
-		testSiteURL + "/contact.html",
-		testSiteURL + "/products/",
-		testSiteURL + "/redirect-chain",
-		testSiteURL + "/redirect-once",
-		testSiteURL + "/search.html?q=gopher&page=1",
-		testSiteURL + "/search.html?q=gopher&page=2",
-		testSiteURL + "/search.html?q=gopher&page=3",
-		testSiteURL + "/search.html?q=other",
-	}
-	assertReachedExactly(t, depth1, wantDepth1)
-
-	// With depth=2, gopher should reach the home page, its immediate links, and
-	// the immediate links' links (but not deeper). So it should reach the blog page
-	// and products page, but not the blog posts or product pages.
-	depth2 := NewGopher(NewConfig(CLIConfig{Depth: 2})).BuildURLMap(root, 0)
-	printCrawl("Depth=2", depth2)
-	wantDepth2 := append(wantDepth1,
-		testSiteURL+"/blog/post-1.html",
-		testSiteURL+"/blog/post-2.html",
-		testSiteURL+"/blog/post-3.html",
-		testSiteURL+"/products/gadget.html",
-		testSiteURL+"/products/widget.html",
-		testSiteURL+"/deep/level-1.html",
-		testSiteURL+"/deep/level-2.html",
-		testSiteURL+"/missing.html",
-		testSiteURL+"/contact.html#form",
-		testSiteURL+"/gone",
-	)
-	assertReachedExactly(t, depth2, wantDepth2)
 }
