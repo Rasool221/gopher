@@ -28,13 +28,13 @@ func ValidateCLI(cfg CLIConfig) error {
 	}
 
 	// Validate LogLevel
-	if cfg.LogLevel < 0 || cfg.LogLevel > 2 {
-		return errors.New("Invalid log level: must be 0 (error), 1 (info), or 2 (debug)")
+	if cfg.LogLevel != "error" && cfg.LogLevel != "info" && cfg.LogLevel != "debug" {
+		return errors.New("Invalid log level: must be error, info, or debug")
 	}
 
 	// Validate Output
-	if cfg.Output < 0 || cfg.Output > 1 {
-		return errors.New("Invalid output option: must be 0 (stdout) or 1 (sqlite)")
+	if cfg.Output != "stdout" && cfg.Output != "sqlite" {
+		return errors.New("Invalid output option: must be stdout or sqlite")
 	}
 
 	return nil

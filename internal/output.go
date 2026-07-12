@@ -22,3 +22,9 @@ func PrintURLMap(urlMap URLMap, indentLevel int) {
 		PrintURLMap(link, indentLevel+1)
 	}
 }
+
+// WriteURLMapToSQLite writes the URL map to a SQLite database at the path of the invoked
+// Gopher command (the current working directory). The database will be named "gopher_output.db".
+func WriteURLMapToSQLite(urlMap URLMap, dbPath string) {
+
+}

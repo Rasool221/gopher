@@ -23,11 +23,11 @@ func main() {
 	// 2: debug
 	// Each number will log that level and all levels above it.
 	switch cfg.LogLevel {
-	case 0: // Only log errors
+	case "error": // Only log errors
 		loggerOptions.Level = slog.LevelError
-	case 1: // Only log info and above (default)
+	case "info": // Only log info and above (default)
 		loggerOptions.Level = slog.LevelInfo
-	case 2: // Log debug and above
+	case "debug": // Log debug and above
 		loggerOptions.Level = slog.LevelDebug
 	default: // If nothing is provided, default to info level
 		loggerOptions.Level = slog.LevelInfo
@@ -45,9 +45,9 @@ func main() {
 	urlMap := gopher.BuildURLMap(cfg.Url)
 
 	switch cfg.Output {
-	case 0: // Print to stdout (default)
+	case "stdout": // Print to stdout (default)
 		internal.PrintURLMap(urlMap, 0)
-	case 1: // Write to SQLite database
+	case "sqlite": // Write to SQLite database
 		slog.Error("Not implemented yet")
 	default: // If nothing is provided, default to stdout
 		slog.Error("Invalid output option, defaulting to stdout")

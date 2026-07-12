@@ -236,16 +236,15 @@ func NewGopher(cfg Config) *Gopher {
 	}
 }
 
-// BuildURLMap fetches the page at url, then recursively crawls every link it finds, returning a
-// URLMap of the URL, its links, and any errors. Visited URLs are tracked on the receiver to avoid
-// infinite loops and redundant work.
-func (g *Gopher) BuildURLMap(url string) URLMap {
+// Run starts a crawl from the given URL while incrementally outputting the results based
+// on the Gopher configuration.
+func (g *Gopher) Run(url string) {
 	slog.Debug("Building URL map for URL", "url", url, "visitedCount", len(g.visited))
 
 	// First, let's avoid infinite loops by checking if we've already visited this URL. If we have, we return an empty URLMap.
 	if _, ok := g.visited[url]; ok {
 		slog.Debug("Already visited URL, skipping to avoid cycle", "url", url)
-		return URLMap{}
+		return
 	}
 
 	// Mark the current URL as visited.
@@ -255,25 +254,22 @@ func (g *Gopher) BuildURLMap(url string) URLMap {
 	pageContent, err := GetPageContent(url)
 	if err != nil {
 		slog.Error("Error fetching page content", "url", url, "error", err)
-		return URLMap{URL: url}
-	}
-
-	urlMap := URLMap{
-		URL:    url,
-		links:  []URLMap{},
-		errors: []error{},
+		return
 	}
 
 	// Extract links from the page content. We pass the page URL itself (not just
 	// the scheme+host) so that document-relative hrefs like "widget.html" resolve
 	// against the directory the page lives in.
 	links, errors := ExtractLinksFromHTML(url, pageContent)
+	for _, err := range errors {
+		slog.Error("Error extracting links from HTML content", "url", url, "error", err)
+		// TODO: output error
+	}
 
 	currentBaseDomain, err := GetBaseDomain(url)
 	if err != nil {
 		slog.Error("Error extracting base domain from URL", "url", url, "error", err)
-		urlMap.errors = append(urlMap.errors, err)
-		return urlMap
+		// TODO: output error
 	}
 
 	// Create a URLMap for the current URL and recursively build URLMaps for each link found.
@@ -298,13 +294,7 @@ func (g *Gopher) BuildURLMap(url string) URLMap {
 			continue
 		}
 
-		childUrlMap := g.BuildURLMap(link)
-		if childUrlMap.URL != "" {
-			urlMap.links = append(urlMap.links, childUrlMap)
-		}
+		// Recursively process children links.
+		g.Run(link)
 	}
-
-	slog.Debug("Built URL map for URL", "url", url, "linksFound", len(links), "errors", len(errors))
-
-	return urlMap
 }
