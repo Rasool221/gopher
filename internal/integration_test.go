@@ -11,8 +11,10 @@ import (
 // testSiteURL and externalSiteURL point at the two dockerized test sites. They're
 // served as distinct base domains via Docker network aliases (see test/docker-compose.yml),
 // so these tests must run inside that network — use `just integration-tests`.
-var testSiteURL = "http://primary.com"
-var externalSiteURL = "http://external.com"
+var (
+	testSiteURL     = "http://primary.com"
+	externalSiteURL = "http://external.com"
+)
 
 // primaryURLs and externalURLs are every URL gopher should traverse on each site.
 // Both containers serve identical content, so the two lists mirror each other under
@@ -144,15 +146,15 @@ func TestIntegration_GetPageContent_FollowsRedirect(t *testing.T) {
 	}
 }
 
-// TestIntegration_BuildUrlMap_TraversesSite walks the primary site from the root and
+// TestIntegration_Run_TraversesSite walks the primary site from the root and
 // asserts gopher reached exactly the routes in primaryURLs (External defaults to false,
 // so the external site is not crawled). It also implicitly tests that cycles (e.g. blog
 // post-3 linking to itself) don't hang gopher — if they did, this test would time out
 // instead of failing an assertion.
-func TestIntegration_BuildUrlMap_TraversesSite(t *testing.T) {
+func TestIntegration_Run_TraversesSite(t *testing.T) {
 	root := testSiteURL + "/"
-	got := NewGopher(NewConfig(CLIConfig{})).BuildURLMap(root)
-	printCrawl("BuildUrlMap (primary, External=false)", got)
+	got := NewGopher(NewConfig(CLIConfig{})).Run(root)
+	printCrawl("Run (primary, External=false)", got)
 
 	if got.URL != root {
 		t.Fatalf("expected root URL %q, got %q", root, got.URL)
@@ -170,13 +172,13 @@ func TestIntegration_External_FlagControlsCrossDomainTraversal(t *testing.T) {
 	root := testSiteURL + "/"
 
 	// External enabled: every primary AND external route should be traversed.
-	withExternal := NewGopher(NewConfig(CLIConfig{External: true})).BuildURLMap(root)
+	withExternal := NewGopher(NewConfig(CLIConfig{External: true})).Run(root)
 	printCrawl("External=true (primary + external)", withExternal)
 	allURLs := append(append([]string{}, primaryURLs...), externalURLs...)
 	assertReachedExactly(t, withExternal, allURLs)
 
 	// External disabled: only the primary routes should be traversed.
-	withoutExternal := NewGopher(NewConfig(CLIConfig{External: false})).BuildURLMap(root)
+	withoutExternal := NewGopher(NewConfig(CLIConfig{External: false})).Run(root)
 	printCrawl("External=false (primary only)", withoutExternal)
 	assertReachedExactly(t, withoutExternal, primaryURLs)
 }

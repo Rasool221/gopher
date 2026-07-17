@@ -2,13 +2,14 @@ package internal
 
 import (
 	"fmt"
-	"golang.org/x/net/html"
-	"golang.org/x/net/publicsuffix"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/publicsuffix"
 )
 
 type URLMap struct {
@@ -238,13 +239,13 @@ func NewGopher(cfg Config) *Gopher {
 
 // Run starts a crawl from the given URL while incrementally outputting the results based
 // on the Gopher configuration.
-func (g *Gopher) Run(url string) {
+func (g *Gopher) Run(url string) URLMap {
 	slog.Debug("Building URL map for URL", "url", url, "visitedCount", len(g.visited))
 
 	// First, let's avoid infinite loops by checking if we've already visited this URL. If we have, we return an empty URLMap.
 	if _, ok := g.visited[url]; ok {
 		slog.Debug("Already visited URL, skipping to avoid cycle", "url", url)
-		return
+		return URLMap{}
 	}
 
 	// Mark the current URL as visited.
@@ -254,7 +255,13 @@ func (g *Gopher) Run(url string) {
 	pageContent, err := GetPageContent(url)
 	if err != nil {
 		slog.Error("Error fetching page content", "url", url, "error", err)
-		return
+		return URLMap{}
+	}
+
+	urlMap := URLMap{
+		URL:    url,
+		links:  []URLMap{},
+		errors: []error{},
 	}
 
 	// Extract links from the page content. We pass the page URL itself (not just
@@ -295,6 +302,11 @@ func (g *Gopher) Run(url string) {
 		}
 
 		// Recursively process children links.
-		g.Run(link)
+		childURLMap := g.Run(link)
+		if childURLMap.URL != "" {
+			urlMap.links = append(urlMap.links, childURLMap)
+		}
 	}
+
+	return urlMap
 }
