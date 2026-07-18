@@ -80,7 +80,7 @@ func ResolveHref(pageURL string, hrefValue string) (string, error) {
 // refLooksLikeExternalHost reports whether a schemeless, authority-less ref path looks like it was
 // meant to be an external host rather than a relative path. It inspects only the first path segment
 // (so "notes.io/post" is judged on "notes.io") and treats it as a host when its trailing label is an
-// ICANN-registered public suffix — e.g. "example.com" / "notes.io" yes, "about.html" / "logo.txt" no.
+// ICANN-registered public suffix e.g. "example.com" / "notes.io" yes, "about.html" / "logo.txt" no.
 // Labels in fileExtensionTLDs (e.g. .md, .sh) are kept relative even though they're valid TLDs.
 func refLooksLikeExternalHost(path string) bool {
 	if path == "" || strings.HasPrefix(path, "/") {
@@ -160,7 +160,7 @@ func GetPageContent(url string) (string, error) {
 // relative hrefs become full absolute URLs. Successfully-resolved URLs are deduped
 // via a map and returned as the first slice; any per-href resolution errors (e.g.
 // unsupported scheme like mailto:) are collected and returned as the second slice.
-// The two slices are NOT parallel-indexed — they're independent collections.
+// The two slices are NOT parallel-indexed; they're independent collections.
 func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error) {
 	slog.Debug("Extracting links from HTML content", "pageURL", pageURL)
 

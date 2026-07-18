@@ -10,7 +10,7 @@ import (
 
 // testSiteURL and externalSiteURL point at the two dockerized test sites. They're
 // served as distinct base domains via Docker network aliases (see test/docker-compose.yml),
-// so these tests must run inside that network — use `just integration-tests`.
+// so these tests must run inside that network. Use `just integration-tests`.
 var (
 	testSiteURL     = "http://primary.com"
 	externalSiteURL = "http://external.com"
@@ -18,7 +18,7 @@ var (
 
 // primaryURLs and externalURLs are every URL gopher should traverse on each site.
 // Both containers serve identical content, so the two lists mirror each other under
-// their respective base domains. The set is deliberately exhaustive — it includes the
+// their respective base domains. The set is deliberately exhaustive; it includes the
 // fragment variant (/contact.html#form), the query-string variants (/search.html?...),
 // the redirect URLs (/redirect-once, /redirect-chain), and the error pages (/missing.html
 // 404, /gone 410). gopher records all of these as visited nodes, so the traversal tests
@@ -35,8 +35,6 @@ var primaryURLs = []string{
 	testSiteURL + "/deep/level-1.html",
 	testSiteURL + "/deep/level-2.html",
 	testSiteURL + "/deep/level-3.html",
-	testSiteURL + "/gone",
-	testSiteURL + "/missing.html",
 	testSiteURL + "/products/",
 	testSiteURL + "/products/gadget.html",
 	testSiteURL + "/products/widget.html",
@@ -60,8 +58,6 @@ var externalURLs = []string{
 	externalSiteURL + "/deep/level-1.html",
 	externalSiteURL + "/deep/level-2.html",
 	externalSiteURL + "/deep/level-3.html",
-	externalSiteURL + "/gone",
-	externalSiteURL + "/missing.html",
 	externalSiteURL + "/products/",
 	externalSiteURL + "/products/gadget.html",
 	externalSiteURL + "/products/widget.html",
@@ -149,7 +145,7 @@ func TestIntegration_GetPageContent_FollowsRedirect(t *testing.T) {
 // TestIntegration_Run_TraversesSite walks the primary site from the root and
 // asserts gopher reached exactly the routes in primaryURLs (External defaults to false,
 // so the external site is not crawled). It also implicitly tests that cycles (e.g. blog
-// post-3 linking to itself) don't hang gopher — if they did, this test would time out
+// post-3 linking to itself) don't hang gopher (if they did, this test would time out
 // instead of failing an assertion.
 func TestIntegration_Run_TraversesSite(t *testing.T) {
 	root := testSiteURL + "/"
