@@ -43,15 +43,15 @@ func TestExtractLinksFromHTML(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result, _ := ExtractLinksFromHTML(test.pageURL, test.content)
-		if len(result) != len(test.expected) {
-			t.Errorf("Expected %d links: %v, got %d links: %v", len(test.expected), test.expected, len(result), result)
+		result := ExtractDataFromHTML(test.pageURL, test.content)
+		if len(result.Links) != len(test.expected) {
+			t.Errorf("Expected %d links: %v, got %d links: %v", len(test.expected), test.expected, len(result.Links), result)
 			continue
 		}
 
 		// ExtractLinksFromHTML returns links in non-deterministic order (map-based dedupe),
 		// so sort both sides before comparing element-wise.
-		got := append([]string(nil), result...)
+		got := append([]string(nil), result.Links...)
 		want := append([]string(nil), test.expected...)
 		sort.Strings(got)
 		sort.Strings(want)

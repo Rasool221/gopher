@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 
-	"golang.org/x/net/html"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -154,72 +153,6 @@ func GetPageContent(url string) (string, error) {
 	return string(bodyBytes), nil
 }
 
-// ExtractLinksFromHTML extracts links from HTML content using the html tokenizer.
-// We iterate through every HTML token and through its attributes, looking for "href" keys.
-// Each href is resolved against pageURL (the URL the HTML was fetched from) so that
-// relative hrefs become full absolute URLs. Successfully-resolved URLs are deduped
-// via a map and returned as the first slice; any per-href resolution errors (e.g.
-// unsupported scheme like mailto:) are collected and returned as the second slice.
-// The two slices are NOT parallel-indexed; they're independent collections.
-func ExtractLinksFromHTML(pageURL string, htmlContent string) ([]string, []error) {
-	slog.Debug("Extracting links from HTML content", "pageURL", pageURL)
-
-	// Map of resolved URLs we've seen, used to dedupe within a single page.
-	linksMap := make(map[string]struct{})
-
-	// Errors encountered while resolving individual hrefs. Eventually surfaced
-	// up to the user if gopher is executed with verbose mode.
-	var parseErrors []error
-
-	tokenizer := html.NewTokenizer(strings.NewReader(htmlContent))
-
-	for {
-		tokenType := tokenizer.Next()
-
-		// ErrorToken represents the EOF or some error during tokenization.
-		// If we encounter an EOF, we break the loop and return the links we've found so far.
-		// If we encounter any other error, we return an empty list of links plus the error.
-		if tokenType == html.ErrorToken {
-			if tokenizer.Err() == io.EOF {
-				slog.Debug("Finished tokenizing HTML content for page", "pageURL", pageURL)
-				break
-			}
-
-			return []string{}, []error{tokenizer.Err()}
-		}
-
-		// Iterate through tokens, then iterate through that token's attributes, looking for "href" keys.
-		// If we find one, resolve it against the page URL and stash the result.
-		token := tokenizer.Token()
-		if tokenType == html.StartTagToken || tokenType == html.SelfClosingTagToken {
-			for _, attr := range token.Attr {
-				if attr.Key != "href" {
-					continue
-				}
-
-				slog.Debug("Found href attribute in HTML token", "hrefValue", attr.Val, "token", token.Data, "pageURL", pageURL)
-				resolved, err := ResolveHref(pageURL, attr.Val)
-				if err != nil {
-					parseErrors = append(parseErrors, err)
-					continue
-				}
-
-				linksMap[resolved] = struct{}{}
-			}
-		}
-	}
-
-	slog.Debug("Extracted links from HTML content", "pageURL", pageURL, "linksFound", len(linksMap), "parseErrors", len(parseErrors))
-
-	// Transform the map of links into a list of links to return.
-	links := make([]string, 0, len(linksMap))
-	for link := range linksMap {
-		links = append(links, link)
-	}
-
-	return links, parseErrors
-}
-
 // Gopher crawls a web server starting from a seed URL, building a tree (URLMap) of the pages and
 // links it finds. It carries the run's Config plus the set of already-visited URLs, so the recursive
 // crawl can honor limits and dedupe cycles without threading that state through every call.
@@ -259,29 +192,31 @@ func (g *Gopher) Run(url string) URLMap {
 	}
 
 	urlMap := URLMap{
-		URL:    url,
-		links:  []URLMap{},
-		errors: []error{},
+		URL:       url,
+		links:     []URLMap{},
+		resources: []string{},
+		errors:    []error{},
 	}
 
-	// Extract links from the page content. We pass the page URL itself (not just
+	// Extract data from the page content. We pass the page URL itself (not just
 	// the scheme+host) so that document-relative hrefs like "widget.html" resolve
 	// against the directory the page lives in.
-	links, errors := ExtractLinksFromHTML(url, pageContent)
-	for _, err := range errors {
-		slog.Error("Error extracting links from HTML content", "url", url, "error", err)
-		// TODO: output error
-	}
+	// If any errors occur during extraction, we just keep moving, those errors are outputted.
+	result := ExtractDataFromHTML(url, pageContent)
 
 	currentBaseDomain, err := GetBaseDomain(url)
 	if err != nil {
 		slog.Error("Error extracting base domain from URL", "url", url, "error", err)
-		// TODO: output error
+		return urlMap
 	}
+
+	// Add resources and errors to urlMap before we recurse exploring links
+	urlMap.errors = append(result.Errors)
+	urlMap.resources = append(result.Resources)
 
 	// Create a URLMap for the current URL and recursively build URLMaps for each link found.
 	// Here we will also honor the cfg.External setting to decide whether to include external links (links to different domains) in the crawl.
-	for _, link := range links {
+	for _, link := range result.Links {
 		childBaseDomain, err := GetBaseDomain(link)
 		if err != nil {
 			slog.Error("Error extracting base domain from link URL", "linkURL", link, "error", err)

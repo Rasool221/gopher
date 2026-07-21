@@ -3,38 +3,39 @@ package internal
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/net/publicsuffix"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 func ValidateCLI(cfg CLIConfig) error {
-	if cfg.Url == "" {
+	if cfg.URL == "" {
 		return errors.New("URL is required")
 	}
 
 	// Validate URL format
-	if !strings.HasPrefix(cfg.Url, "http://") && !strings.HasPrefix(cfg.Url, "https://") {
-		return errors.New("Malformed URL: URL must start with http:// or https://")
+	if !strings.HasPrefix(cfg.URL, "http://") && !strings.HasPrefix(cfg.URL, "https://") {
+		return errors.New("malformed URL: URL must start with http:// or https://")
 	}
 
 	// Validate website is reachable
-	err := ValidateServerReachable(cfg.Url)
+	err := ValidateServerReachable(cfg.URL)
 	if err != nil {
 		return err
 	}
 
 	// Validate LogLevel
 	if cfg.LogLevel != "error" && cfg.LogLevel != "info" && cfg.LogLevel != "debug" {
-		return errors.New("Invalid log level: must be error, info, or debug")
+		return errors.New("invalid log level: must be error, info, or debug")
 	}
 
 	// Validate Output
 	if cfg.Output != "stdout" && cfg.Output != "sqlite" {
-		return errors.New("Invalid output option: must be stdout or sqlite")
+		return errors.New("invalid output option: must be stdout or sqlite")
 	}
 
 	return nil

@@ -43,5 +43,5 @@ func main() {
 
 	// Map the CLI config onto the internal domain config, then build the URL map for the given URL.
 	gopher := internal.NewGopher(internal.NewConfig(cfg))
-	gopher.Output(gopher.Run(cfg.Url))
+	gopher.Output(gopher.Run(cfg.URL))
 }
