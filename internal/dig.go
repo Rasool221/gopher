@@ -211,8 +211,8 @@ func (g *Gopher) Run(url string) URLMap {
 	}
 
 	// Add resources and errors to urlMap before we recurse exploring links
-	urlMap.errors = append(result.Errors)
-	urlMap.resources = append(result.Resources)
+	urlMap.errors = result.Errors
+	urlMap.resources = result.Resources
 
 	// Create a URLMap for the current URL and recursively build URLMaps for each link found.
 	// Here we will also honor the cfg.External setting to decide whether to include external links (links to different domains) in the crawl.

@@ -3,6 +3,7 @@ package internal
 import (
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -89,14 +90,19 @@ func ExtractDataFromHTML(pageURL string, htmlContent string) ExtractionResult {
 
 				switch attr.Key {
 				case "href":
-					extractionResult.addLink(resolved)
+					// Sometimes resources will be in the hef key, so we need to check whether the file extension from url.
+					resolvedFilePath := filepath.Ext(resolved)
+					if resolvedFilePath != "" && !strings.HasPrefix(resolvedFilePath, ".html") {
+						extractionResult.addResource(resolved)
+					} else {
+						extractionResult.addLink(resolved)
+					}
 				case "src", "poster":
 					extractionResult.addResource(resolved)
 				}
 			}
 		}
 	}
-
 	slog.Debug("Extracted links from HTML content", "pageURL", pageURL, "len(extractionResult.Links)", len(extractionResult.Links), "len(extractionResult.Errors)", len(extractionResult.Errors))
 
 	return extractionResult

@@ -5,62 +5,206 @@ import (
 	"testing"
 )
 
-func TestExtractLinksFromHTML(t *testing.T) {
+func TestExtractDataFromHTML(t *testing.T) {
 	tests := []struct {
-		pageURL  string // The URL the HTML was "fetched" from; relative hrefs resolve against this.
-		content  string
-		expected []string // Expected resolved URLs, order-independent.
+		name              string
+		pageURL           string
+		content           string
+		expectedLinks     []string
+		expectedResources []string
+		expectedErrCount  int
 	}{
-		// Absolute http URL: passes through unchanged.
-		{"http://test.local/", `<html><body><a href="http://example.com">Example</a></body></html>`, []string{"http://example.com"}},
-
-		// Multiple links. "google.com" is schemeless but its trailing label is a real TLD (.com),
-		// so it's promoted to the external host "http://google.com". "104.20.23.154" has no public
-		// suffix (numeric), so it stays a relative path resolved against the page URL.
 		{
-			"http://test.local/",
-			`<html><body><a href="http://example.com">Example</a><div href="google.com">Google</div><img href="104.20.23.154">Example by IP address</img></body></html>`,
-			[]string{"http://example.com", "http://google.com", "http://test.local/104.20.23.154"},
+			name:              "absolute http URL",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><a href="http://example.com">Example</a></body></html>`,
+			expectedLinks:     []string{"http://example.com"},
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:    "multiple links with schemeless and IP",
+			pageURL: "http://test.local/",
+			// "google.com" promoted to external host; "104.20.23.154" stays relative.
+			content:           `<html><body><a href="http://example.com">Example</a><div href="google.com">Google</div><img href="104.20.23.154">Example by IP address</img></body></html>`,
+			expectedLinks:     []string{"http://example.com", "http://google.com", "http://test.local/104.20.23.154"},
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:              "root-relative href",
+			pageURL:           "http://test.local/products/",
+			content:           `<html><a href="/about.html">About</a></html>`,
+			expectedLinks:     []string{"http://test.local/about.html"},
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:              "document-relative href",
+			pageURL:           "http://test.local/products/",
+			content:           `<html><a href="widget.html">Widget</a></html>`,
+			expectedLinks:     []string{"http://test.local/products/widget.html"},
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:              "parent-directory href",
+			pageURL:           "http://test.local/products/",
+			content:           `<html><a href="../about.html">Up one</a></html>`,
+			expectedLinks:     []string{"http://test.local/about.html"},
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:              "non-HTTP schemes produce errors not links",
+			pageURL:           "http://test.local/",
+			content:           `<html><a href="mailto:hello@example.com">mail</a><a href="javascript:void(0)">js</a></html>`,
+			expectedLinks:     nil,
+			expectedResources: nil,
+			expectedErrCount:  2,
+		},
+		{
+			name:              "empty HTML",
+			pageURL:           "http://test.local/",
+			content:           `<html></html>`,
+			expectedLinks:     nil,
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:              "malformed HTML",
+			pageURL:           "http://test.local/",
+			content:           `<html><not-a-real-tag>`,
+			expectedLinks:     nil,
+			expectedResources: nil,
+			expectedErrCount:  0,
 		},
 
-		// Root-relative href resolves against the page's scheme+host.
-		{"http://test.local/products/", `<html><a href="/about.html">About</a></html>`, []string{"http://test.local/about.html"}},
+		// --- Resource tests ---
 
-		// Document-relative href resolves against the page's directory.
-		{"http://test.local/products/", `<html><a href="widget.html">Widget</a></html>`, []string{"http://test.local/products/widget.html"}},
-
-		// Parent-directory href.
-		{"http://test.local/products/", `<html><a href="../about.html">Up one</a></html>`, []string{"http://test.local/about.html"}},
-
-		// Non-HTTP(S) schemes get rejected into the errors slice, not the links slice.
-		{"http://test.local/", `<html><a href="mailto:hello@example.com">mail</a><a href="javascript:void(0)">js</a></html>`, []string{}},
-
-		// Empty result on empty HTML.
-		{"http://test.local/", `<html></html>`, []string{}},
-
-		// Malformed HTML still tokenizes; no hrefs means no links.
-		{"http://test.local/", `<html><not-a-real-tag>`, []string{}},
+		{
+			name:              "img src is a resource",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><img src="/images/photo.jpg"></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/images/photo.jpg"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "video src and poster are resources",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><video src="/media/clip.mp4" poster="/media/poster.jpg"></video></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/media/clip.mp4", "http://test.local/media/poster.jpg"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "gif via img src",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><img src="/images/animation.gif"></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/images/animation.gif"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "file download link via href",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><a href="/files/report.pdf">Download PDF</a></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/files/report.pdf"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "mixed links, resources, and errors",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><a href="/about.html">About</a><img src="/img/logo.png"><a href="mailto:hi@example.com">Mail</a><video src="/vid/intro.webm" poster="/vid/thumb.png"></video></body></html>`,
+			expectedLinks:     []string{"http://test.local/about.html"},
+			expectedResources: []string{"http://test.local/img/logo.png", "http://test.local/vid/intro.webm", "http://test.local/vid/thumb.png"},
+			expectedErrCount:  1,
+		},
+		{
+			name:              "deduplication of resources",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><img src="/img/logo.png"><img src="/img/logo.png"></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/img/logo.png"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "deduplication of links",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><a href="/about.html">A</a><a href="/about.html">B</a></body></html>`,
+			expectedLinks:     []string{"http://test.local/about.html"},
+			expectedResources: nil,
+			expectedErrCount:  0,
+		},
+		{
+			name:              "absolute resource URL passes through",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><img src="https://cdn.example.com/pic.jpg"></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"https://cdn.example.com/pic.jpg"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "source element inside video",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><video><source src="/media/trailer.mkv" type="video/x-matroska"></video></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/media/trailer.mkv"},
+			expectedErrCount:  0,
+		},
+		{
+			name:              "audio src is a resource",
+			pageURL:           "http://test.local/",
+			content:           `<html><body><audio src="/audio/song.mp3"></audio></body></html>`,
+			expectedLinks:     nil,
+			expectedResources: []string{"http://test.local/audio/song.mp3"},
+			expectedErrCount:  0,
+		},
 	}
 
 	for _, test := range tests {
-		result := ExtractDataFromHTML(test.pageURL, test.content)
-		if len(result.Links) != len(test.expected) {
-			t.Errorf("Expected %d links: %v, got %d links: %v", len(test.expected), test.expected, len(result.Links), result)
-			continue
-		}
+		t.Run(test.name, func(t *testing.T) {
+			result := ExtractDataFromHTML(test.pageURL, test.content)
 
-		// ExtractLinksFromHTML returns links in non-deterministic order (map-based dedupe),
-		// so sort both sides before comparing element-wise.
-		got := append([]string(nil), result.Links...)
-		want := append([]string(nil), test.expected...)
-		sort.Strings(got)
-		sort.Strings(want)
-
-		for i, link := range got {
-			if link != want[i] {
-				t.Errorf("Expected link '%s', got '%s'", want[i], link)
+			// Check error count.
+			if len(result.Errors) != test.expectedErrCount {
+				t.Errorf("expected %d errors, got %d: %v", test.expectedErrCount, len(result.Errors), result.Errors)
 			}
-		}
+
+			// Check links (order-independent).
+			gotLinks := append([]string(nil), result.Links...)
+			wantLinks := append([]string(nil), test.expectedLinks...)
+			sort.Strings(gotLinks)
+			sort.Strings(wantLinks)
+
+			if len(gotLinks) != len(wantLinks) {
+				t.Errorf("expected %d links: %v, got %d: %v", len(wantLinks), wantLinks, len(gotLinks), gotLinks)
+			} else {
+				for i, link := range gotLinks {
+					if link != wantLinks[i] {
+						t.Errorf("link[%d]: expected %q, got %q", i, wantLinks[i], link)
+					}
+				}
+			}
+
+			// Check resources (order-independent).
+			gotResources := append([]string(nil), result.Resources...)
+			wantResources := append([]string(nil), test.expectedResources...)
+			sort.Strings(gotResources)
+			sort.Strings(wantResources)
+
+			if len(gotResources) != len(wantResources) {
+				t.Errorf("expected %d resources: %v, got %d: %v", len(wantResources), wantResources, len(gotResources), gotResources)
+			} else {
+				for i, res := range gotResources {
+					if res != wantResources[i] {
+						t.Errorf("resource[%d]: expected %q, got %q", i, wantResources[i], res)
+					}
+				}
+			}
+		})
 	}
 }
 

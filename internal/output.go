@@ -25,6 +25,8 @@ func (g *Gopher) Output(urlMap URLMap) {
 	default: // If nothing is provided, default to stdout
 		slog.Error("Invalid output option, defaulting to stdout")
 	}
+
+	fmt.Printf("\nGopher run complete. Run ID: %s\n", g.cfg.RunID)
 }
 
 // PrintURLMap recursively prints the URL map to stdout in a readable format,
@@ -35,6 +37,10 @@ func PrintURLMap(urlMap URLMap, indentLevel int) {
 
 	for _, resource := range urlMap.resources {
 		fmt.Printf("%s  * Resource: %s\n", indent, resource)
+	}
+
+	for _, error := range urlMap.errors {
+		fmt.Printf("%s  * Error: %s\n", indent, error)
 	}
 
 	for _, link := range urlMap.links {
