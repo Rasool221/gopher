@@ -19,6 +19,13 @@ integration-tests:
   docker compose -f test/docker-compose.yml run --rm tests
   docker compose -f test/docker-compose.yml down
 
+# Run a single integration test by name, e.g.:
+#   just integration-test TestIntegration_Run_PrimaryResources
+integration-test TEST:
+  docker compose -f test/docker-compose.yml run --rm tests go test -tags=integration -count=1 -v -run {{TEST}} ./internal/...
+  docker compose -f test/docker-compose.yml down
+  docker compose -f test/docker-compose.yml up -d
+
 test-site-up:
   docker compose -f test/docker-compose.yml up -d
 

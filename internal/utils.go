@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
@@ -104,6 +105,40 @@ func IsValidHost(host string) bool {
 	// suffix != host ensures there's a registrable label in front of the TLD (rules out a bare "com").
 	suffix, icann := publicsuffix.PublicSuffix(host)
 	return icann && suffix != host
+}
+
+// IsLikelyFile reports whether a href value is likely to be a file rather than a host. This is used
+// while crawing to determine if we've extracted a link or a resource
+func IsLikelyFile(href string) bool {
+	// Removing any trailing slashes (/) from the href, as they don't affect the file type.
+	for {
+		res, found := strings.CutSuffix(href, "/")
+		href = res
+		if !found {
+			break
+		}
+	}
+
+	// If any tokens like fragmens or query params or trailing slashes are present, we only look at the string before it.
+	if i := strings.IndexAny(href, "?#"); i >= 0 {
+		href = href[:i]
+	}
+
+	// Now we're going to parse the file type from the extension
+	if u, err := url.Parse(href); err == nil {
+		href = u.Path
+	}
+
+	ext := strings.TrimPrefix(filepath.Ext(href), ".")
+
+	// A last gate that catches if we've actualy isolated a host, not a file.
+	// Look at the docs for fileExtensionTLDs for more information on why the first condition is necessary.
+	if _, likelyFileExt := fileExtensionTLDs[ext]; !likelyFileExt && IsValidHost(href) {
+		return false
+	}
+
+	// If a non-empty extension is present, we can consider it a file.
+	return ext != ""
 }
 
 // IsValidHostnameChars reports whether host contains only characters legal in a hostname

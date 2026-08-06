@@ -1,9 +1,9 @@
 package internal
 
 import (
+	"errors"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -91,11 +91,12 @@ func ExtractDataFromHTML(pageURL string, htmlContent string) ExtractionResult {
 				switch attr.Key {
 				case "href":
 					// Sometimes resources will be in the hef key, so we need to check whether the file extension from url.
-					resolvedFilePath := filepath.Ext(resolved)
-					if resolvedFilePath != "" && !strings.HasPrefix(resolvedFilePath, ".html") {
-						extractionResult.addResource(resolved)
+					if IsValidHost(attr.Val) {
+						extractionResult.addLink(attr.Val)
+					} else if IsLikelyFile(attr.Val) {
+						extractionResult.addResource(attr.Val)
 					} else {
-						extractionResult.addLink(resolved)
+						extractionResult.Errors = append(extractionResult.Errors, errors.New("Unrecognized href value: "+attr.Val))
 					}
 				case "src", "poster":
 					extractionResult.addResource(resolved)

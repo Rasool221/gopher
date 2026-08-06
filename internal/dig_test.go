@@ -181,6 +181,7 @@ func TestExtractDataFromHTML(t *testing.T) {
 
 			if len(gotLinks) != len(wantLinks) {
 				t.Errorf("expected %d links: %v, got %d: %v", len(wantLinks), wantLinks, len(gotLinks), gotLinks)
+				t.Errorf("result.Links %+v", result.Links)
 			} else {
 				for i, link := range gotLinks {
 					if link != wantLinks[i] {
@@ -197,6 +198,7 @@ func TestExtractDataFromHTML(t *testing.T) {
 
 			if len(gotResources) != len(wantResources) {
 				t.Errorf("expected %d resources: %v, got %d: %v", len(wantResources), wantResources, len(gotResources), gotResources)
+				t.Errorf("result.Resources %+v", result.Resources)
 			} else {
 				for i, res := range gotResources {
 					if res != wantResources[i] {

@@ -2,8 +2,10 @@ package internal
 
 import "testing"
 
-var SHOULD_ERR = true
-var SHOULD_NOT_ERR = false
+var (
+	SHOULD_ERR     = true
+	SHOULD_NOT_ERR = false
+)
 
 func TestValidateURLFormat(t *testing.T) {
 	tests := []struct {
@@ -81,6 +83,49 @@ func TestGetBaseDomain(t *testing.T) {
 
 			if got != tt.want {
 				t.Errorf("GetBaseDomain() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsLikelyFile(t *testing.T) {
+	tests := []struct {
+		name string
+		href string
+		want bool
+	}{
+		{"pdf direct", "https://example.com/file.pdf", true},
+		{"nested file", "https://example.com/a/b/c/image.png", true},
+		{"uppercase ext", "https://example.com/report.PDF", true},
+		{"multi-dot name", "https://example.com/very.long.name.pdf", true},
+		{"composite ext", "https://example.com/archive.tar.gz", true},
+		{"query after file", "https://example.com/file.pdf?download=1&token=x", true},
+		{"fragment after file", "https://example.com/file.pdf#section", true},
+
+		{"bare filename", "report.docx", true},
+		{"relative path", "../docs/spec.pdf", true},
+		{"relative with query", "download.zip?ref=2", true},
+
+		{"root", "https://example.com/", false},
+		{"no ext", "https://example.com/page", false},
+		{"no ext with slash", "https://example.com/news/2024/", false},
+		{"ext only in query", "https://example.com/search?q=file.pdf", false},
+		{"query only", "https://example.com/download?id=5", false},
+		{"empty", "", false},
+		{"non-http scheme", "mailto:foo@bar.com", false},
+		{"js scheme", "javascript:void(0)", false},
+		{"hash only", "#top", false},
+
+		{"trailing slash after file", "https://example.com/file.pdf/", true},
+		{"hidden file", "https://example.com/.env", true},
+		{"hidden dotfile", ".gitignore", true},
+		{"trailing dot", "https://example.com/foo.", false},
+		{"no-extension download", "https://example.com/download?id=5", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsLikelyFile(tt.href); got != tt.want {
+				t.Errorf("IsLikelyFile(%q) = %v, want %v", tt.href, got, tt.want)
 			}
 		})
 	}
