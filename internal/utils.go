@@ -3,38 +3,40 @@ package internal
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/net/publicsuffix"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 func ValidateCLI(cfg CLIConfig) error {
-	if cfg.Url == "" {
+	if cfg.URL == "" {
 		return errors.New("URL is required")
 	}
 
 	// Validate URL format
-	if !strings.HasPrefix(cfg.Url, "http://") && !strings.HasPrefix(cfg.Url, "https://") {
-		return errors.New("Malformed URL: URL must start with http:// or https://")
+	if !strings.HasPrefix(cfg.URL, "http://") && !strings.HasPrefix(cfg.URL, "https://") {
+		return errors.New("malformed URL: URL must start with http:// or https://")
 	}
 
 	// Validate website is reachable
-	err := ValidateServerReachable(cfg.Url)
+	err := ValidateServerReachable(cfg.URL)
 	if err != nil {
 		return err
 	}
 
 	// Validate LogLevel
-	if cfg.LogLevel < 0 || cfg.LogLevel > 2 {
-		return errors.New("Invalid log level: must be 0 (error), 1 (info), or 2 (debug)")
+	if cfg.LogLevel != "error" && cfg.LogLevel != "info" && cfg.LogLevel != "debug" {
+		return errors.New("invalid log level: must be error, info, or debug")
 	}
 
 	// Validate Output
-	if cfg.Output < 0 || cfg.Output > 1 {
-		return errors.New("Invalid output option: must be 0 (stdout) or 1 (sqlite)")
+	if cfg.Output != "stdout" && cfg.Output != "sqlite" {
+		return errors.New("invalid output option: must be stdout or sqlite")
 	}
 
 	return nil
@@ -89,6 +91,7 @@ func ValidateURL(target string) error {
 // IsValidHost reports whether host is something we'd actually try to reach: localhost, a literal IP,
 // or a domain whose trailing label is a real ICANN-registered public suffix. This is what rejects
 // "example" (no TLD) and "exa&*$.com" (invalid characters) while accepting "example.com".
+// This function must be called without a HTTP scheme or a port. See ValidateURL for full validation.
 func IsValidHost(host string) bool {
 	if host == "localhost" {
 		return true
@@ -103,6 +106,45 @@ func IsValidHost(host string) bool {
 	// suffix != host ensures there's a registrable label in front of the TLD (rules out a bare "com").
 	suffix, icann := publicsuffix.PublicSuffix(host)
 	return icann && suffix != host
+}
+
+// IsLikelyFile reports whether a href value is likely to be a file rather than a host. This is used
+// while crawing to determine if we've extracted a link or a resource
+func IsLikelyFile(href string) bool {
+	// Removing any trailing slashes (/) from the href, as they don't affect the file type.
+	for {
+		res, found := strings.CutSuffix(href, "/")
+		href = res
+		if !found {
+			break
+		}
+	}
+
+	// If any tokens like fragmens or query params or trailing slashes are present, we only look at the string before it.
+	if i := strings.IndexAny(href, "?#"); i >= 0 {
+		href = href[:i]
+	}
+
+	// Now we're going to parse the file type from the extension
+	if u, err := url.Parse(href); err == nil {
+		href = u.Path
+	}
+
+	ext := strings.TrimPrefix(filepath.Ext(href), ".")
+
+	// A last gate that catches if we've actualy isolated a host, not a file.
+	// Look at the docs for fileExtensionTLDs for more information on why the first condition is necessary.
+	if _, likelyFileExt := fileExtensionTLDs[ext]; !likelyFileExt && IsValidHost(href) {
+		return false
+	}
+
+	// HTML pages are links, not downloadable resources, so don't treat them as files.
+	if ext == "html" || ext == "htm" {
+		return false
+	}
+
+	// If a non-empty extension is present, we can consider it a file.
+	return ext != ""
 }
 
 // IsValidHostnameChars reports whether host contains only characters legal in a hostname

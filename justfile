@@ -14,10 +14,17 @@ unit-tests:
 # Run integration tests against the dockerized test sites.
 # Runs `go test` inside the compose network (the `tests` service), which is what lets it
 # resolve the primary.com / external.com aliases. depends_on waits for the sites'
-# healthchecks first; sites are left running afterwards — use `just test-site-down`.
+# healthchecks first; sites are left running afterwards. Use `just test-site-down`.
 integration-tests:
   docker compose -f test/docker-compose.yml run --rm tests
   docker compose -f test/docker-compose.yml down
+
+# Run a single integration test by name, e.g.:
+#   just integration-test TestIntegration_Run_PrimaryResources
+integration-test TEST:
+  docker compose -f test/docker-compose.yml run --rm tests go test -tags=integration -count=1 -v -run {{TEST}} ./internal/...
+  docker compose -f test/docker-compose.yml down
+  docker compose -f test/docker-compose.yml up -d
 
 test-site-up:
   docker compose -f test/docker-compose.yml up -d

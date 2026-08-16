@@ -1,7 +1,7 @@
 # Two identical nginx sites are served under two
 # different hostnames via Docker network aliases (primary.com / external.com), so
 # gopher parses them as two distinct base domains. Both listen on :80 inside the
-# network, so the base domain — not the port — is what differs (gopher treats
+# network, so the base domain (not the port) is what differs (gopher treats
 # localhost:8080 and localhost:9090 as the same domain, which is why a second port
 # alone can't exercise the External flag).
 #
