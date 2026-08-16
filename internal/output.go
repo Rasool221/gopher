@@ -36,7 +36,10 @@ func PrintURLMap(urlMap URLMap, indentLevel int) {
 	fmt.Printf("%s- URL: %s\n", indent, urlMap.URL)
 
 	for _, resource := range urlMap.resources {
-		fmt.Printf("%s  * Resource: %s\n", indent, resource)
+		fmt.Printf("%s  * Resource: %s\n", indent, resource.URL)
+		if len(resource.Path) > 0 {
+			fmt.Printf("%s    Path: %s\n", indent, strings.Join(resource.Path, " -> "))
+		}
 	}
 
 	for _, error := range urlMap.errors {
@@ -99,7 +102,7 @@ func insertURLMapToSQLite(tx *sql.Tx, node URLMap, parentURL string, cfg Config)
 	for _, resource := range node.resources {
 		if _, err := tx.Exec(
 			gopherSqliteInsertResourceSQL,
-			cfg.RunID, resource, resourceFileType(resource), node.URL,
+			cfg.RunID, resource.URL, resourceFileType(resource.URL), node.URL,
 		); err != nil {
 			return err
 		}

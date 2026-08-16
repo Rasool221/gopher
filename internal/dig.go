@@ -14,7 +14,7 @@ import (
 type URLMap struct {
 	URL       string
 	links     []URLMap // Links to other URLs found on the page
-	resources []string // Resources (like images, scripts) found on the page
+	resources []Resource // Resources (like images, scripts) found on the page
 	errors    []error  // Errors encountered while processing the page
 }
 
@@ -194,7 +194,7 @@ func (g *Gopher) Run(url string) URLMap {
 	urlMap := URLMap{
 		URL:       url,
 		links:     []URLMap{},
-		resources: []string{},
+		resources: []Resource{},
 		errors:    []error{},
 	}
 

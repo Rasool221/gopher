@@ -91,6 +91,7 @@ func ValidateURL(target string) error {
 // IsValidHost reports whether host is something we'd actually try to reach: localhost, a literal IP,
 // or a domain whose trailing label is a real ICANN-registered public suffix. This is what rejects
 // "example" (no TLD) and "exa&*$.com" (invalid characters) while accepting "example.com".
+// This function must be called without a HTTP scheme or a port. See ValidateURL for full validation.
 func IsValidHost(host string) bool {
 	if host == "localhost" {
 		return true
@@ -134,6 +135,11 @@ func IsLikelyFile(href string) bool {
 	// A last gate that catches if we've actualy isolated a host, not a file.
 	// Look at the docs for fileExtensionTLDs for more information on why the first condition is necessary.
 	if _, likelyFileExt := fileExtensionTLDs[ext]; !likelyFileExt && IsValidHost(href) {
+		return false
+	}
+
+	// HTML pages are links, not downloadable resources, so don't treat them as files.
+	if ext == "html" || ext == "htm" {
 		return false
 	}
 

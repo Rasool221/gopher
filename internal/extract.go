@@ -1,18 +1,28 @@
 package internal
 
 import (
-	"errors"
 	"io"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
 )
 
+// Resource is a file (image, video, audio, downloadable file, etc.) referenced by a page.
+// URL is the fully-resolved absolute URL of the resource. Path is the chain of links from
+// the base host down to the resource itself (the resource URL is the final element), which
+// lets consumers render the resource as part of the site's directory tree. Resources on a
+// different base domain than the page have a nil Path and are included as-is.
+type Resource struct {
+	URL  string
+	Path []string
+}
+
 type ExtractionResult struct {
-	Links     []string // Links found in the HTML content
-	Resources []string // Resources found in the HTML content
-	Errors    []error  // Errors encountered while processing the HTML content
+	Links     []string   // Links found in the HTML content
+	Resources []Resource // Resources found in the HTML content
+	Errors    []error    // Errors encountered while processing the HTML content
 
 	LinksMap     map[string]struct{} // Map of resolved URLs we've seen, used to dedupe within a single page.
 	ResourcesMap map[string]struct{} // Map of resolved resources we've seen, used to dedupe within a single page.
@@ -31,15 +41,63 @@ func (er *ExtractionResult) addLink(link string) {
 }
 
 // addResource adds a resource to the ExtractionResult, ensuring no duplicates are added.
-func (er *ExtractionResult) addResource(resource string) {
+// The resource's path chain is built from its resolved URL against the page the resource
+// was found on; external resources get a nil Path.
+func (er *ExtractionResult) addResource(pageURL string, resource string) {
 	if er.ResourcesMap == nil {
 		er.ResourcesMap = make(map[string]struct{})
 	}
 
 	if _, exists := er.ResourcesMap[resource]; !exists {
-		er.Resources = append(er.Resources, resource)
+		er.Resources = append(er.Resources, Resource{
+			URL:  resource,
+			Path: resourcePath(pageURL, resource),
+		})
 		er.ResourcesMap[resource] = struct{}{}
 	}
+}
+
+// resourcePath returns the chain of links from the base host down to a resource, e.g. for
+// http://example.net/assets/logo.png:
+//
+//	[http://example.net/, http://example.net/assets/, http://example.net/assets/logo.png]
+//
+// It returns nil when the resource lives on a different base domain than the page, since
+// external resources are kept as-is rather than expanded into the page's directory tree.
+func resourcePath(pageURL string, resourceURL string) []string {
+	pageBase, err := GetBaseDomain(pageURL)
+	if err != nil {
+		return nil
+	}
+	resourceBase, err := GetBaseDomain(resourceURL)
+	if err != nil {
+		return nil
+	}
+	if pageBase != resourceBase {
+		return nil
+	}
+
+	u, err := url.Parse(resourceURL)
+	if err != nil {
+		return nil
+	}
+
+	base := u.Scheme + "://" + u.Host
+
+	// A resource sitting at the host root has no parent directories.
+	if u.Path == "" || u.Path == "/" {
+		return []string{base + "/"}
+	}
+
+	path := []string{base + "/"}
+	dir := ""
+	segments := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	for i := 0; i < len(segments)-1; i++ {
+		dir += "/" + segments[i]
+		path = append(path, base+dir+"/")
+	}
+
+	return append(path, resourceURL)
 }
 
 // ExtractDataFromHTML extracts links & resources from HTML content using the html tokenizer.
@@ -90,16 +148,18 @@ func ExtractDataFromHTML(pageURL string, htmlContent string) ExtractionResult {
 
 				switch attr.Key {
 				case "href":
-					// Sometimes resources will be in the hef key, so we need to check whether the file extension from url.
-					if IsValidHost(attr.Val) {
-						extractionResult.addLink(attr.Val)
+					// Sometimes resources will be in the href key, so we need to check whether the file extension from url.
+					if err := ValidateURL(attr.Val); err == nil {
+						extractionResult.addLink(resolved)
 					} else if IsLikelyFile(attr.Val) {
-						extractionResult.addResource(attr.Val)
+						extractionResult.addResource(pageURL, resolved)
 					} else {
-						extractionResult.Errors = append(extractionResult.Errors, errors.New("Unrecognized href value: "+attr.Val))
+						// Not a standalone URL and not a file: a relative page link
+						// (e.g. "/about.html", "../about.html"). Record the resolved link.
+						extractionResult.addLink(resolved)
 					}
 				case "src", "poster":
-					extractionResult.addResource(resolved)
+					extractionResult.addResource(pageURL, resolved)
 				}
 			}
 		}

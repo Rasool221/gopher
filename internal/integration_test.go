@@ -124,7 +124,11 @@ func collectReachedURLs(node URLMap, reached map[string]struct{}) {
 // to its list of resources. Returns one entry per visited page.
 func collectResourcesByURL(node URLMap, out map[string][]string) {
 	if len(node.resources) > 0 {
-		out[node.URL] = append([]string(nil), node.resources...)
+		urls := make([]string, 0, len(node.resources))
+		for _, r := range node.resources {
+			urls = append(urls, r.URL)
+		}
+		out[node.URL] = urls
 	}
 	for _, child := range node.links {
 		collectResourcesByURL(child, out)
