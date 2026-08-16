@@ -31,8 +31,7 @@ Gopher can be configured with the following options (you may see `internal/cli.g
 - [x] Basic crawling functionality (fetching pages, parsing links, tracking visited URLs)
 - [x] Logging with different levels (error, info, debug)
 - [x] Handling edge cases (redirects, mixed URL formats, subdomains)
-- [ ] Support for outputting results to a SQLite database
-- [ ] Support for outputting results to an interactive graph-based web interface
+- [x] Support for outputting results to a SQLite database
 - [ ] Support for using proxies to make requests
 - [ ] Support for delaying requests to avoid rate-limiting
 - [ ] Support concurrency via Goroutines
@@ -41,5 +40,6 @@ Gopher can be configured with the following options (you may see `internal/cli.g
 - [ ] Add CONTRIBUTING.md with guidelines for contributing to the project
 - [ ] Add Github Actions for CI/CD (e.g. run tests on push, build binaries on release)
 - [ ] Release on package managers (e.g. Homebrew, APT, etc.) once v1 is ready
+- [ ] Support for outputting results to an interactive graph-based web interface
 
 
