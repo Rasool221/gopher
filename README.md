@@ -21,11 +21,34 @@ For external links, Gopher uses a simple heuristic to determine if a link is ext
 ## Configuration
 
 Gopher can be configured with the following options (you may see `internal/cli.go` for more details):
-- [WIP] `Workers (-w [number], default=1)` The number of concurrent workers to use for crawling 
 - `LogLevel (-l 0|1|2, default=1)` The level of logging to output (0=error, 1=info, 2=debug)
 - `External (-e true/false, default=false)` Whether or not to crawl external links (links that do not share the same domain as the original URL)
 - [WIP] `Output (-o 0|1, default=0)` Where to write the output (0=stdout, 1=sqlite)
 - [WIP] `Proxies (-p [proxy], default=none)` A path to a `.txt` file containing a list of proxies to use for requests (one proxy per line, in the format `http://ip:port` or `https://ip:port`)
+
+### Proxy file format
+
+Pass `-p <file>` with one proxy URL per line:
+
+```
+scheme://[user:pass@]host:port
+```
+
+| Part          | Values                                | Required |
+|---------------|---------------------------------------|----------|
+| `scheme`      | `http`, `https`, `socks5`                   | yes      |
+| `user:pass@`  | basic-auth credentials                | no       |
+| `host:port`   | proxy hostname and port               | yes      |
+
+Example `proxies.txt`:
+
+```
+socks5://10.0.0.1:1080
+https://user:secret@proxy.example.com:8443
+socks4://198.51.100.7:1080
+```
+
+If a proxies file is provided, requests are made in round-robin fashion via healthy proxies.
 
 ## Planned
 - [x] Basic crawling functionality (fetching pages, parsing links, tracking visited URLs)

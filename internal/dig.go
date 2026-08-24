@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
@@ -13,9 +14,9 @@ import (
 
 type URLMap struct {
 	URL       string
-	links     []URLMap // Links to other URLs found on the page
+	links     []URLMap   // Links to other URLs found on the page
 	resources []Resource // Resources (like images, scripts) found on the page
-	errors    []error  // Errors encountered while processing the page
+	errors    []error    // Errors encountered while processing the page
 }
 
 // ResolveHref takes the URL of the page we're currently scanning and the href value
@@ -129,8 +130,31 @@ func refLooksLikeExternalHost(path string) bool {
 // GetPageContent makes an HTTP request to the given URL and returns the HTML content as a string.
 // Note that GetPageContent expects the url to be a valid URL that is reachable.
 // It also handles any errors that may occur during the request, which ultimately is returned.
-func GetPageContent(url string) (string, error) {
+func (g *Gopher) GetPageContent(url string) (string, error) {
 	slog.Debug("Fetching page content for URL", "url", url)
+
+	// Create a custom HTTP client to handle proxy settings if needed.
+	client := &http.Client{}
+
+	// If proxies are set, we should use them to make the request.
+	if g.proxies != nil {
+		proxyURL, err := g.proxies.GetNextProxy()
+		if err != nil {
+			return "", fmt.Errorf("failed to get next proxy: %w", err)
+		}
+
+		slog.Debug("Using proxy for request", "url", url, "proxyURL", proxyURL)
+
+		proxyParsedURL, err := url.Parse(proxyURL)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse proxy URL: %w", err)
+		}
+
+		// Set the proxy for the HTTP client transport.
+		client.Transport = &http.Transport{
+			Proxy: http.ProxyURL(proxyParsedURL),
+		}
+	}
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -159,15 +183,29 @@ func GetPageContent(url string) (string, error) {
 type Gopher struct {
 	cfg     Config
 	visited map[string]struct{}
+	proxies *ProxyQueue
 }
 
 // NewGopher returns a Gopher ready to crawl with the given config. The visited set is initialized
 // here, so callers never deal with a nil map.
 func NewGopher(cfg Config) *Gopher {
-	return &Gopher{
+	gopher := Gopher{
 		cfg:     cfg,
 		visited: make(map[string]struct{}),
 	}
+
+	if cfg.ProxyFile != "" {
+		pq, err := CreateProxyQueue(cfg)
+		// If there was an error creating the proxy queue, log the error and exit the program.
+		if err != nil {
+			slog.Error("Error creating proxy queue", "error", err)
+			os.Exit(1)
+		}
+
+		gopher.proxies = pq
+	}
+
+	return &gopher
 }
 
 // Run starts a crawl from the given URL while incrementally outputting the results based
@@ -185,7 +223,7 @@ func (g *Gopher) Run(url string) URLMap {
 	g.visited[url] = struct{}{}
 
 	// Fetch the page content for the given URL.
-	pageContent, err := GetPageContent(url)
+	pageContent, err := g.GetPageContent(url)
 	if err != nil {
 		slog.Error("Error fetching page content", "url", url, "error", err)
 		return URLMap{}

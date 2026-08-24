@@ -17,6 +17,15 @@ var supportedHTMLKeys = map[string]bool{
 	// TODO: support "srcset"?
 }
 
+// socks4 is not supported because the Go standard library doesn't support it.
+var supportedProxySchemes = map[string]bool{
+	"http":   true,
+	"https":  true,
+	"socks5": true,
+}
+
+var proxyHealthcheckURLs = []string{"http://www.gstatic.com/generate_204", "http://detectportal.firefox.com/success.txt"}
+
 // gopherSqliteDBName is the name of the SQLite DB generated
 // with Gopher's output if the output CLI param is set to SQLite.
 const gopherSqliteDBName = "gopher_output.db"
