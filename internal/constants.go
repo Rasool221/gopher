@@ -24,7 +24,18 @@ var supportedProxySchemes = map[string]bool{
 	"socks5": true,
 }
 
-var proxyHealthcheckURLs = []string{"http://www.gstatic.com/generate_204", "http://detectportal.firefox.com/success.txt"}
+// redirectFollowLimit is the maximum number of redirects
+// to follow for a single request.
+const redirectFollowLimit = 10
+
+// proxyTimeoutSeconds is the timeout for proxy requests in seconds.
+// If the request made with a proxy exceeds this time
+// it will be considered a failure and the next proxy in the queue will be used.
+const proxyTimeoutNs = 1.5 * 1e9
+
+// proxyUnhealthyRetryCount is the amount of times we will
+// retry the request with a different proxy in case a certain one is unhealthy.
+const proxyUnhealthyRetryCount = 5
 
 // gopherSqliteDBName is the name of the SQLite DB generated
 // with Gopher's output if the output CLI param is set to SQLite.

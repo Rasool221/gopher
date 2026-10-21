@@ -130,40 +130,17 @@ func refLooksLikeExternalHost(path string) bool {
 // GetPageContent makes an HTTP request to the given URL and returns the HTML content as a string.
 // Note that GetPageContent expects the url to be a valid URL that is reachable.
 // It also handles any errors that may occur during the request, which ultimately is returned.
-func (g *Gopher) GetPageContent(url string) (string, error) {
-	slog.Debug("Fetching page content for URL", "url", url)
+func (g *Gopher) GetPageContent(pageUrl string) (string, error) {
+	slog.Debug("Fetching page content for URL", "url", pageUrl)
 
-	// Create a custom HTTP client to handle proxy settings if needed.
-	client := &http.Client{}
-
-	// If proxies are set, we should use them to make the request.
-	if g.proxies != nil {
-		proxyURL, err := g.proxies.GetNextProxy()
-		if err != nil {
-			return "", fmt.Errorf("failed to get next proxy: %w", err)
-		}
-
-		slog.Debug("Using proxy for request", "url", url, "proxyURL", proxyURL)
-
-		proxyParsedURL, err := url.Parse(proxyURL)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse proxy URL: %w", err)
-		}
-
-		// Set the proxy for the HTTP client transport.
-		client.Transport = &http.Transport{
-			Proxy: http.ProxyURL(proxyParsedURL),
-		}
-	}
-
-	resp, err := http.Get(url)
+	resp, err := http.Get(pageUrl)
 	if err != nil {
 		return "", err
 	}
 
 	defer resp.Body.Close()
 
-	slog.Debug("Received HTTP response for URL", "url", url, "statusCode", resp.StatusCode)
+	slog.Debug("Received HTTP response for URL", "url", pageUrl, "statusCode", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to fetch page content: %s", resp.Status)

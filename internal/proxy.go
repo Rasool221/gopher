@@ -3,6 +3,7 @@ package internal
 import (
 	"bufio"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -28,49 +29,6 @@ func (pq *ProxyQueue) enqueue(proxy string) {
 
 	pq.proxies = append(pq.proxies, proxy)
 	pq.proxiesSet[proxy] = struct{}{}
-}
-
-// IsProxyAlive checks if the provided proxy is alive and reachable.
-// This function attempts to make a simple HTTP GET request through the proxy to a known URL.
-func IsProxyAlive(proxy string) (bool, error) {
-	if !IsProxyValid(proxy) {
-		return false, nil
-	}
-
-	proxyURL, err := url.Parse(proxy)
-	if err != nil {
-		return false, err
-	}
-
-	transport := &http.Transport{
-		Proxy: http.ProxyURL(proxyURL),
-	}
-
-	client := &http.Client{
-		Transport: transport,
-	}
-
-	var amtSuccessfulChecks int
-
-	for _, healthcheckURL := range proxyHealthcheckURLs {
-		resp, err := client.Get(healthcheckURL)
-		if err != nil {
-			return false, err
-		}
-
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
-			amtSuccessfulChecks++
-		}
-	}
-
-	if amtSuccessfulChecks == 0 {
-		return false, errors.New("proxy is not alive, failed all health checks")
-	}
-
-	// If any of the health checks passed, we consider the proxy alive.
-	return true, nil
 }
 
 // IsProxyValid checks if the provided proxy string is a valid URL and supported by the HTTP client.
@@ -115,7 +73,7 @@ func CreateProxyQueue(cfg Config) (*ProxyQueue, error) {
 		line := scanner.Text()
 
 		// Check if the proxy is valid and supported before adding it to the queue
-		if ok, err := IsProxyAlive(line); !ok || err != nil {
+		if IsProxyValid(line) {
 			pq.enqueue(line)
 		}
 	}
@@ -139,4 +97,91 @@ func (pq *ProxyQueue) GetNextProxy() (string, error) {
 	}
 
 	return proxy, nil
+}
+
+// RequestOptiosn stores options for making requests.
+// Used for storing additional optional parameters.
+type RequestOptions struct {
+	pageUrl       string
+	redirectCount int
+}
+
+// MakeRequest makes an HTTP GET request to the specified pageUrl
+// and returns the content. The next proxy in the queue will be used, and if in un-healthy,
+// will retry up to proxyUnhealthyRetryCount times.
+func (g *Gopher) MakeRequest(options RequestOptions) (string, error) {
+	if g.proxies == nil {
+		return "", errors.New("no proxies are available")
+	}
+
+	if len(options.pageUrl) == 0 {
+		return "", errors.New("pageUrl is required")
+	}
+
+	if options.redirectCount > redirectFollowLimit {
+		return "", errors.New("exceeded redirect follow limit")
+	}
+
+	amountFailures := 0
+
+	for amountFailures <= proxyUnhealthyRetryCount {
+		nextProxy, err := g.proxies.GetNextProxy()
+		if err != nil {
+			return "", err
+		}
+
+		resp, err := MakeRequestWithProxy(options.pageUrl, nextProxy)
+
+		// If we've made a successful request we can return the content
+		if resp.StatusCode <= 299 && resp.StatusCode >= 200 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return "", err
+			}
+
+			return string(body), nil
+		}
+
+		// Following certain status codes
+		switch resp.StatusCode {
+		case http.StatusMovedPermanently: // 301
+			headers := resp.Header
+			if location := headers.Get("Location"); location != "" {
+				return g.MakeRequest(RequestOptions{location, options.redirectCount + 1})
+			}
+		// TODO: Handle 302
+		// TODO: Handle 303
+		// TODO: Handle 307
+		// TODO: Handle 308
+		default:
+			break
+		}
+	}
+
+	return "", errors.New("exceeded retries for unhealthy proxies")
+}
+
+// MakeRequestWithProxy makes an HTTP GET request to the specified pageUrl
+// using the provided proxy. It returns a pointer to the response and an error.
+// It is a thin wrapper around the actual HTTP request for cleaner code.
+func MakeRequestWithProxy(pageUrl string, proxy string) (*http.Response, error) {
+	proxyUrl, err := url.Parse(proxy)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyURL(proxyUrl),
+	}
+
+	client := &http.Client{
+		Transport: transport,
+	}
+
+	req, err := http.NewRequest("GET", pageUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.Do(req)
 }
