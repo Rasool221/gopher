@@ -99,27 +99,16 @@ func (pq *ProxyQueue) GetNextProxy() (string, error) {
 	return proxy, nil
 }
 
-// RequestOptiosn stores options for making requests.
-// Used for storing additional optional parameters.
-type RequestOptions struct {
-	pageUrl       string
-	redirectCount int
-}
-
 // MakeRequest makes an HTTP GET request to the specified pageUrl
 // and returns the content. The next proxy in the queue will be used, and if in un-healthy,
 // will retry up to proxyUnhealthyRetryCount times.
-func (g *Gopher) MakeRequest(options RequestOptions) (string, error) {
+func (g *Gopher) MakeRequest(pageUrl string) (string, error) {
 	if g.proxies == nil {
 		return "", errors.New("no proxies are available")
 	}
 
-	if len(options.pageUrl) == 0 {
+	if len(pageUrl) == 0 {
 		return "", errors.New("pageUrl is required")
-	}
-
-	if options.redirectCount > redirectFollowLimit {
-		return "", errors.New("exceeded redirect follow limit")
 	}
 
 	amountFailures := 0
@@ -130,7 +119,11 @@ func (g *Gopher) MakeRequest(options RequestOptions) (string, error) {
 			return "", err
 		}
 
-		resp, err := MakeRequestWithProxy(options.pageUrl, nextProxy)
+		// TODO: add check to see if we should use a proxy or not
+		resp, err := MakeRequestWithProxy(pageUrl, nextProxy)
+		if err != nil {
+			return "", err
+		}
 
 		// If we've made a successful request we can return the content
 		if resp.StatusCode <= 299 && resp.StatusCode >= 200 {
@@ -142,20 +135,7 @@ func (g *Gopher) MakeRequest(options RequestOptions) (string, error) {
 			return string(body), nil
 		}
 
-		// Following certain status codes
-		switch resp.StatusCode {
-		case http.StatusMovedPermanently: // 301
-			headers := resp.Header
-			if location := headers.Get("Location"); location != "" {
-				return g.MakeRequest(RequestOptions{location, options.redirectCount + 1})
-			}
-		// TODO: Handle 302
-		// TODO: Handle 303
-		// TODO: Handle 307
-		// TODO: Handle 308
-		default:
-			break
-		}
+		slog.Debug("request failed with proxy", "proxy", nextProxy, "status", resp.Status, "retryCount", amountFailures)
 	}
 
 	return "", errors.New("exceeded retries for unhealthy proxies")
@@ -176,6 +156,12 @@ func MakeRequestWithProxy(pageUrl string, proxy string) (*http.Response, error) 
 
 	client := &http.Client{
 		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= redirectFollowLimit {
+				return errors.New("stopped after maximum redirects")
+			}
+			return nil
+		},
 	}
 
 	req, err := http.NewRequest("GET", pageUrl, nil)
